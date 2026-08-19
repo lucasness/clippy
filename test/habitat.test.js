@@ -9,6 +9,7 @@ const {
   displayFor,
   whereOn,
   habitatFrom,
+  describePlace,
 } = require('../src/habitat');
 
 // A desk that actually exists: a Studio Display as the primary, with the
@@ -174,4 +175,50 @@ test('the whole habitat reads the way the desk looks', () => {
 test('no window means no where, not a crash', () => {
   assert.equal(habitatFrom(DESK).where, null);
   assert.deepEqual(habitatFrom([]), { displays: [], neighbors: [], where: null });
+});
+
+/* ---------- Saying it out loud ---------- */
+
+test('the pet is told where it stands and what is next door', () => {
+  const said = describePlace(habitatFrom(DESK, at(2600, 1100)));
+  assert.equal(
+    said,
+    'You are standing near the bottom-left of the MacBook screen. ' +
+      'The Studio Display is to its left.'
+  );
+});
+
+test('one screen is described as the only one, with no neighbours invented', () => {
+  const said = describePlace(habitatFrom([STUDIO], at(100, 100)));
+  assert.match(said, /the only screen there is/);
+  assert.ok(!said.includes('right'), said);
+});
+
+test('the middle of a screen is the middle, not "near the middle"', () => {
+  const wa = STUDIO.workArea;
+  const middle = at(wa.x + wa.width / 2 - BUDDY.width / 2, wa.y + wa.height / 2);
+  assert.match(describePlace(habitatFrom([STUDIO], middle)), /standing in the middle of/);
+});
+
+test('two neighbours are read out as a list, not a run-on', () => {
+  const above = { ...STUDIO, id: 3, label: 'TV', bounds: { x: 0, y: -1440, width: 2560, height: 1440 } };
+  const said = describePlace(habitatFrom([...DESK, above], at(100, 100)));
+  assert.match(said, /The MacBook screen is to its right and the TV is above it\./);
+});
+
+test('a screen the buddy cannot see from here is still mentioned', () => {
+  // An island: touching nothing, so it is nobody's neighbour.
+  const island = { ...STUDIO, id: 4, label: 'Sidecar', bounds: { x: 9000, y: 0, width: 1024, height: 768 } };
+  const said = describePlace(habitatFrom([...DESK, island], at(100, 100)));
+  assert.match(said, /Further off: the Sidecar\./);
+});
+
+test('with no window to place, the desk is still described', () => {
+  const said = describePlace(habitatFrom(DESK));
+  assert.equal(said, 'The screens here are the Studio Display and the MacBook screen.');
+});
+
+test('no screens at all is silence, not a broken sentence', () => {
+  assert.equal(describePlace(habitatFrom([])), '');
+  assert.equal(describePlace(null), '');
 });

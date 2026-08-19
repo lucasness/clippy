@@ -235,4 +235,71 @@ function habitatFrom(displays, windowBounds) {
   return { displays: described, neighbors: neighbors(displays), where };
 }
 
-module.exports = { friendlyNames, sharedEdge, neighbors, displayFor, whereOn, habitatFrom };
+/** How a neighbour reads from where the buddy is standing. */
+const SIDE_WORDS = {
+  right: 'to its right',
+  left: 'to its left',
+  above: 'above it',
+  below: 'below it',
+};
+
+/** "a, b and c" — an English list, not a comma-joined array. */
+function listOf(parts) {
+  if (parts.length <= 1) return parts[0] || '';
+  return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+}
+
+/**
+ * The world in a sentence or three, for a prompt.
+ *
+ * This is what the pet is *told* about where it is: which screen it's standing
+ * on and whereabouts, what's next to that screen, and anything else on the
+ * desk it can't see from there. Prose rather than JSON because it goes into a
+ * system prompt, and pure like the rest of this module so the wording is
+ * something a test can hold still.
+ *
+ * @param {{displays:Array,neighbors:Array,where:object|null}} world  habitatFrom's answer
+ * @returns {string} '' when there is nothing worth saying
+ */
+function describePlace(world) {
+  if (!world || !world.displays.length) return '';
+  const { displays, neighbors: exits, where } = world;
+  const nameOf = (id) => displays.find((d) => d.id === id)?.name || 'another screen';
+  const said = new Set();
+  const sentences = [];
+
+  if (where) {
+    said.add(where.displayId);
+    const spot = where.region === 'middle' ? 'in the middle of' : `near the ${where.region} of`;
+    const only = displays.length === 1 ? ', the only screen there is' : '';
+    sentences.push(`You are standing ${spot} the ${where.name}${only}.`);
+
+    const near = exits.filter((n) => n.from === where.displayId);
+    if (near.length) {
+      for (const n of near) said.add(n.to);
+      const listed = listOf(near.map((n) => `the ${nameOf(n.to)} is ${SIDE_WORDS[n.side]}`));
+      sentences.push(`${listed[0].toUpperCase()}${listed.slice(1)}.`);
+    }
+  }
+
+  // Screens the sentences above never mentioned: either the buddy's own
+  // display has no neighbours, or there was no window to place at all.
+  const rest = displays.filter((d) => !said.has(d.id));
+  if (rest.length && rest.length < displays.length) {
+    sentences.push(`Further off: ${listOf(rest.map((d) => `the ${d.name}`))}.`);
+  } else if (rest.length) {
+    sentences.push(`The screens here are ${listOf(rest.map((d) => `the ${d.name}`))}.`);
+  }
+
+  return sentences.join(' ');
+}
+
+module.exports = {
+  friendlyNames,
+  sharedEdge,
+  neighbors,
+  displayFor,
+  whereOn,
+  habitatFrom,
+  describePlace,
+};
