@@ -2879,10 +2879,16 @@ const ROAM_PAUSE_JITTER_MS = 7000;
  * and it stops the moment the setting is turned off.
  */
 function startRoaming(buddy) {
-  if (!buddy || buddy.win.isDestroyed() || !buddy.win.isVisible()) return;
+  if (!buddy || buddy.win.isDestroyed()) return;
   if (!settings.freeRoam || buddy.roam) return;
-  buddy.roam = { timer: null, lap: [], at: 0 };
-  roamStep(buddy);
+  // Coming out is not instant: showing a buddy measures the terminal window
+  // first so it can appear already perched, which resolves a moment later. So
+  // the wander waits for the window rather than testing once and giving up.
+  buddy.roam = { timer: null, lap: [], at: 0, waits: 0 };
+  // A perched buddy is holding on to a terminal; wandering means letting go,
+  // and leaving it docked would have the perch poll dragging it back mid-lap.
+  if (buddy.dock) undock(buddy);
+  buddy.roam.timer = setTimeout(() => roamStep(buddy), 1200);
 }
 
 function stopRoaming(buddy) {
@@ -2894,7 +2900,16 @@ function stopRoaming(buddy) {
 /** One leg of a wander, then a pause, then the next. */
 function roamStep(buddy) {
   if (!buddy?.roam || buddy.win.isDestroyed()) return stopRoaming(buddy);
-  if (!settings.freeRoam || !buddy.win.isVisible()) return stopRoaming(buddy);
+  if (!settings.freeRoam) return stopRoaming(buddy);
+  if (!buddy.win.isVisible()) {
+    // Still on its way out, or put away by something else. Give it a few
+    // moments, then accept that this buddy is not on screen after all.
+    buddy.roam.waits += 1;
+    if (buddy.roam.waits > 8) return stopRoaming(buddy);
+    buddy.roam.timer = setTimeout(() => roamStep(buddy), 900);
+    return;
+  }
+  buddy.roam.waits = 0;
   // A card went up while he was pottering: the job outranks the wander.
   if (buddy.mode && buddy.mode !== 'compact') return stopRoaming(buddy);
 
@@ -3469,8 +3484,12 @@ function emitPassive(reaction, { osNotification = true } = {}) {
     // and goes for a wander. Everything that wants him back still gets him —
     // the next card shows as it always did, and roaming stops the instant one
     // arrives.
-    if (settings.freeRoam && buddyOf(reaction.sessionId)?.win.isVisible()) {
-      startRoaming(buddyOf(reaction.sessionId));
+    const roamer = settings.freeRoam ? buddyOf(reaction.sessionId) : null;
+    if (roamer && !roamer.win.isDestroyed()) {
+      // Out he comes, if he wasn't already: idle mode means the screen is
+      // where he lives, not somewhere he visits when a card is up.
+      if (!roamer.win.isVisible()) showBuddy(reaction.sessionId, { mode: 'compact' });
+      startRoaming(roamer);
       return;
     }
     hideBuddy(reaction.sessionId);
