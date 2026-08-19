@@ -229,9 +229,58 @@ function walkMsFor(from, to, speed = WALK_SPEED) {
   return Math.round(clamp(ms, MIN_WALK_MS, MAX_WALK_MS));
 }
 
+/**
+ * Somewhere to wander to, for a buddy left to its own devices.
+ *
+ * A lap of the work area's edge, as a ring of spots: along the top, down the
+ * right, back along the bottom, up the left. Returned in order so a caller can
+ * walk them in sequence and get a lap rather than a twitch, and starting from
+ * whichever spot is nearest wherever the buddy already stands — a wander should
+ * carry on from here, not teleport to a corner and begin there.
+ *
+ * The edge rather than the middle because a pet crossing the middle of a screen
+ * is in the way, and the perimeter is the part of a desk nobody is working in.
+ *
+ * @param {object} display  one of world.displays
+ * @param {{width:number,height:number}} size  the buddy window
+ * @param {{x:number,y:number}} [from]  where it is now, to start the lap near
+ * @param {number} [perSide]  spots along each edge
+ * @returns {Array<{x:number,y:number}>}
+ */
+function perimeterLap(display, size, from = null, perSide = 3) {
+  if (!display || !size) return [];
+  const wa = display.workArea;
+  const left = wa.x;
+  const right = Math.max(wa.x, wa.x + wa.width - size.width);
+  const top = wa.y;
+  const bottom = Math.max(wa.y, wa.y + wa.height - size.height);
+  const steps = Math.max(1, perSide);
+
+  const along = (a, b, i) => Math.round(a + ((b - a) * i) / steps);
+  const ring = [];
+  for (let i = 0; i < steps; i += 1) ring.push({ x: along(left, right, i), y: top });
+  for (let i = 0; i < steps; i += 1) ring.push({ x: right, y: along(top, bottom, i) });
+  for (let i = 0; i < steps; i += 1) ring.push({ x: along(right, left, i), y: bottom });
+  for (let i = 0; i < steps; i += 1) ring.push({ x: left, y: along(bottom, top, i) });
+
+  if (!from) return ring;
+  // Rotate the ring so the lap picks up from where the buddy already is.
+  let best = 0;
+  let nearest = Infinity;
+  ring.forEach((spot, i) => {
+    const d = (spot.x - from.x) ** 2 + (spot.y - from.y) ** 2;
+    if (d < nearest) {
+      nearest = d;
+      best = i;
+    }
+  });
+  return [...ring.slice(best), ...ring.slice(0, best)];
+}
+
 module.exports = {
   canStandAt,
   nearestSpot,
+  perimeterLap,
   displayPath,
   portalPoint,
   routeBetween,

@@ -164,3 +164,55 @@ test('distance is the diagonal, not one axis', () => {
   // 3-4-5: the diagonal of 300×400 is 500, so it takes as long as a flat 500.
   assert.equal(walkMsFor({ x: 0, y: 0 }, { x: 300, y: 400 }), walkMsFor({ x: 0, y: 0 }, { x: 500, y: 0 }));
 });
+
+/* ---------- Wandering the edge ---------- */
+
+const { perimeterLap } = require('../src/travel');
+
+test('a lap goes round the edge of the work area, never through the middle', () => {
+  const lap = perimeterLap(STUDIO, BUDDY);
+  assert.equal(lap.length, 12); // three spots a side
+  const wa = STUDIO.workArea;
+  for (const spot of lap) {
+    const onEdge =
+      spot.x === wa.x ||
+      spot.y === wa.y ||
+      spot.x === wa.x + wa.width - BUDDY.width ||
+      spot.y === wa.y + wa.height - BUDDY.height;
+    assert.ok(onEdge, `not on an edge: ${JSON.stringify(spot)}`);
+  }
+});
+
+test('every spot on a lap is somewhere the buddy could actually stand', () => {
+  const w = world();
+  for (const spot of perimeterLap(STUDIO, BUDDY)) {
+    assert.equal(canStandAt(w, { ...spot, ...BUDDY }).ok, true, JSON.stringify(spot));
+  }
+});
+
+test('a lap starts from where the buddy already is, not from a corner', () => {
+  const wa = STUDIO.workArea;
+  // Standing near the bottom-left: the lap should begin near there.
+  const near = { x: wa.x, y: wa.y + wa.height - BUDDY.height };
+  const [first] = perimeterLap(STUDIO, BUDDY, near);
+  const far = perimeterLap(STUDIO, BUDDY)[0];
+  assert.notDeepEqual(first, far);
+  const distance = (a, b) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
+  assert.ok(distance(first, near) < distance(far, near));
+});
+
+test('a lap is a loop: it visits all four sides whatever it starts from', () => {
+  const wa = STUDIO.workArea;
+  const lap = perimeterLap(STUDIO, BUDDY, { x: wa.x + wa.width, y: wa.y });
+  assert.equal(lap.length, 12);
+  assert.equal(new Set(lap.map((s) => `${s.x},${s.y}`)).size, 12);
+});
+
+test('a screen too small for the buddy still gives a lap, not a crash', () => {
+  const tiny = { ...STUDIO, workArea: { x: 0, y: 0, width: 60, height: 60 } };
+  const lap = perimeterLap(tiny, BUDDY);
+  assert.equal(lap.length, 12);
+  for (const spot of lap) {
+    assert.ok(spot.x >= 0 && spot.y >= 0, JSON.stringify(spot));
+  }
+});

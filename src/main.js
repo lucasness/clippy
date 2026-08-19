@@ -78,7 +78,13 @@ const { createFocusProbe, looksFocused } = require('./frontmost');
 const { describeSource } = require('./source-app');
 const { routingPrompt, parseChoice, routable } = require('./delegate');
 const { habitatFrom, describePlace, destinations, spotFor } = require('./habitat');
-const { routeBetween, canStandAt, nearestSpot, walkMsFor } = require('./travel');
+const {
+  routeBetween,
+  canStandAt,
+  nearestSpot,
+  walkMsFor,
+  perimeterLap,
+} = require('./travel');
 
 const PORT = Number(process.env.CLIPPY_PORT || 43117);
 let installingUpdate = false;
@@ -159,6 +165,10 @@ const settings = {
   soloSize: '',
   size: 'medium', // the size a project gets when it hasn't picked one
   arrangeEdge: '', // screen edge new buddies line up on; '' = the classic corner
+  // Idle mode: a visible buddy with nothing to say stays on screen and wanders
+  // the edge of its display instead of being put away. Off by default — the
+  // promise is that he stays where you dropped him until you say otherwise.
+  freeRoam: false,
   // …and the sessions Clippy starts itself (see spawnAgent).
   defaultAgent: 'claude', // which agent a recent project re-opens with
   attachTerminal: 'terminal', // where "attach in terminal" opens the session
@@ -1150,6 +1160,7 @@ function showBuddy(key, { pin = false, mode = 'full' } = {}) {
 function hideBuddy(key, { unpin = false } = {}) {
   const buddy = buddyOf(key);
   if (!buddy || buddy.win.isDestroyed()) return;
+  stopRoaming(buddy);
   // Whatever a perch measurement in flight was going to do, this outranks it.
   buddy.visibilityTurn++;
   if (unpin) {
@@ -2000,6 +2011,10 @@ function rehomeAfterDisplayChange() {
 }
 
 function stopWalking(buddy) {
+  // A wander is the only movement nobody asked for, so anything that takes the
+  // window back ends it too. Travel started *by* the wander re-arms its own
+  // timer in the callback below, so this only bites when something else calls.
+  if (buddy?.roam && !buddy.walk) stopRoaming(buddy);
   if (!buddy?.walk) return;
   clearInterval(buddy.walk.timer);
   clearTimeout(buddy.walk.hold);
@@ -2848,39 +2863,83 @@ function showUsageFor(key) {
   showBuddy(key, { pin: true });
 }
 
+/* ---------------- Idle mode: a buddy left to its own devices ---------------- */
+
+// How long a roaming buddy stands still between legs of its wander. Long
+// enough that it reads as a pet pottering about rather than pacing.
+const ROAM_PAUSE_MS = 9000;
+const ROAM_PAUSE_JITTER_MS = 7000;
+
 /**
- * "Walk over to…" — somewhere for the buddy to go, chosen by hand.
+ * Send a buddy off wandering the edge of the screen it is on.
  *
- * Dragging a buddy to another monitor works, but it means picking up a small
- * window and carrying it across a desk's worth of screen. This is the same
- * journey travelTo will make when it is asked in words, minus the asking, and
- * it is how the walking gets used by anybody who never types at the pet.
- *
- * Offered even on a single screen, where it is still the easy way to send a
- * buddy to a corner without picking it up.
+ * Idle roaming is the one thing in Clippy that moves without being asked, so
+ * it gives way to everything: any card, nudge, perch or drag calls stopWalking
+ * or stopRoaming and the wander is over. It never starts on a hidden buddy,
+ * and it stops the moment the setting is turned off.
  */
-function walkToMenu(buddy) {
-  if (!buddy || buddy.win.isDestroyed()) return [];
+function startRoaming(buddy) {
+  if (!buddy || buddy.win.isDestroyed() || !buddy.win.isVisible()) return;
+  if (!settings.freeRoam || buddy.roam) return;
+  buddy.roam = { timer: null, lap: [], at: 0 };
+  roamStep(buddy);
+}
+
+function stopRoaming(buddy) {
+  if (!buddy?.roam) return;
+  clearTimeout(buddy.roam.timer);
+  buddy.roam = null;
+}
+
+/** One leg of a wander, then a pause, then the next. */
+function roamStep(buddy) {
+  if (!buddy?.roam || buddy.win.isDestroyed()) return stopRoaming(buddy);
+  if (!settings.freeRoam || !buddy.win.isVisible()) return stopRoaming(buddy);
+  // A card went up while he was pottering: the job outranks the wander.
+  if (buddy.mode && buddy.mode !== 'compact') return stopRoaming(buddy);
+
   const bounds = buddy.win.getBounds();
-  const world = habitatFrom(screen.getAllDisplays(), bounds, buddy.dock?.bounds);
-  if (!world.displays.length) return [];
-  const size = { width: bounds.width, height: bounds.height };
-  return [
-    { type: 'separator' },
-    {
-      label: 'Walk over to',
-      submenu: destinations(world).map((spot) => {
-        const display = world.displays.find((d) => d.id === spot.displayId);
-        return {
-          label: spot.label,
-          click: () => {
-            showBuddy(buddy.sessionId, { pin: true });
-            travelTo(buddy, spotFor(display, spot.region, size, WIN_GAP));
-          },
-        };
-      }),
-    },
-  ];
+  const world = habitatFrom(screen.getAllDisplays(), bounds);
+  const here = world.where && world.displays.find((d) => d.id === world.where.displayId);
+  if (!here) return stopRoaming(buddy);
+
+  if (buddy.roam.at >= buddy.roam.lap.length) {
+    buddy.roam.lap = perimeterLap(here, bounds, bounds).slice(1);
+    buddy.roam.at = 0;
+  }
+  const next = buddy.roam.lap[buddy.roam.at];
+  buddy.roam.at += 1;
+  if (!next) return stopRoaming(buddy);
+
+  const walked = travelTo(buddy, next, () => {
+    if (!buddy.roam) return;
+    const wait = ROAM_PAUSE_MS + Math.floor(Math.random() * ROAM_PAUSE_JITTER_MS);
+    buddy.roam.timer = setTimeout(() => roamStep(buddy), wait);
+  });
+  // Somewhere it could not go — a display just vanished, most likely. Wait and
+  // work it out again from wherever it actually is.
+  if (!walked) buddy.roam.timer = setTimeout(() => roamStep(buddy), ROAM_PAUSE_MS);
+}
+
+/** Everybody stops wandering — the setting went off, or something needs the screen. */
+function stopAllRoaming() {
+  for (const buddy of buddies.values()) stopRoaming(buddy);
+}
+
+/**
+ * Turning idle mode on brings everybody out.
+ *
+ * Otherwise the setting does nothing visible until the next card happens to
+ * come and go, which reads as a switch that isn't wired to anything. A buddy
+ * shown this way is deliberately not pinned: the first thing that genuinely
+ * wants the screen can still put it away.
+ */
+function startAllRoaming() {
+  for (const buddy of buddies.values()) {
+    if (!buddy || buddy.win.isDestroyed()) continue;
+    if (!buddy.win.isVisible()) showBuddy(buddy.sessionId, { mode: 'compact' });
+    startRoaming(buddy);
+  }
 }
 
 function trayMenu() {
@@ -2902,7 +2961,6 @@ function trayMenu() {
       ...(b.dock
         ? [{ label: 'Unperch', click: () => hideBuddy(b.sessionId, { unpin: true }) }]
         : []),
-      ...walkToMenu(b),
     ],
   }));
 
@@ -3047,6 +3105,17 @@ function globalSettingsMenu() {
     }));
 
   return [
+    {
+      label: 'Idle roaming — he plays about on screen',
+      type: 'checkbox',
+      checked: settings.freeRoam,
+      click: (item) => {
+        setSetting('freeRoam', item.checked);
+        if (item.checked) startAllRoaming();
+        else stopAllRoaming();
+      },
+    },
+    { type: 'separator' },
     { label: 'Answer from Clippy', enabled: false },
     {
       label: 'Permission requests',
@@ -3395,6 +3464,15 @@ function emitPassive(reaction, { osNotification = true } = {}) {
   // activity, session start, the user typing again) puts Clippy away.
   const action = windowActionFor(reaction.kind);
   if (action === 'hide') {
+    // Idle mode is exactly this moment turned around: instead of being put
+    // away when the session stops needing anything, a roaming buddy stays out
+    // and goes for a wander. Everything that wants him back still gets him —
+    // the next card shows as it always did, and roaming stops the instant one
+    // arrives.
+    if (settings.freeRoam && buddyOf(reaction.sessionId)?.win.isVisible()) {
+      startRoaming(buddyOf(reaction.sessionId));
+      return;
+    }
     hideBuddy(reaction.sessionId);
     return;
   }
@@ -4369,6 +4447,10 @@ app.whenReady().then(async () => {
   for (const change of ['display-added', 'display-removed', 'display-metrics-changed']) {
     screen.on(change, rehomeAfterDisplayChange);
   }
+  // A buddy only exists once its session has said something, so idle mode
+  // cannot start at launch — it starts each buddy as it appears, and this
+  // catches any that were already there across a restart.
+  if (settings.freeRoam) setTimeout(startAllRoaming, 3000).unref?.();
 
   ipcMain.handle('clippy-context', async (e) => {
     const buddy = buddyForSender(e.sender);
