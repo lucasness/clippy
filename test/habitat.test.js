@@ -10,6 +10,9 @@ const {
   whereOn,
   habitatFrom,
   describePlace,
+  destinations,
+  spotFor,
+  SPOTS,
 } = require('../src/habitat');
 
 // A desk that actually exists: a Studio Display as the primary, with the
@@ -183,8 +186,8 @@ test('the pet is told where it stands and what is next door', () => {
   const said = describePlace(habitatFrom(DESK, at(2600, 1100)));
   assert.equal(
     said,
-    'You are standing near the bottom-left of the MacBook screen. ' +
-      'The Studio Display is to its left.'
+    'You are standing near the bottom-left of the MacBook screen (1512×982). ' +
+      'The Studio Display (2560×1440) is to its left.'
   );
 });
 
@@ -203,7 +206,7 @@ test('the middle of a screen is the middle, not "near the middle"', () => {
 test('two neighbours are read out as a list, not a run-on', () => {
   const above = { ...STUDIO, id: 3, label: 'TV', bounds: { x: 0, y: -1440, width: 2560, height: 1440 } };
   const said = describePlace(habitatFrom([...DESK, above], at(100, 100)));
-  assert.match(said, /The MacBook screen is to its right and the TV is above it\./);
+  assert.match(said, /The MacBook screen \(1512×982\) is to its right and the TV \(2560×1440\) is above it\./);
 });
 
 test('a screen the buddy cannot see from here is still mentioned', () => {
@@ -245,4 +248,69 @@ test('naming the terminal screen does not also list it as further off', () => {
   const said = describePlace(habitatFrom([...DESK, island], at(100, 100), at(9100, 100)));
   assert.match(said, /terminal is over on the Sidecar\./);
   assert.doesNotMatch(said, /Further off/);
+});
+
+/* ---------- Somewhere to go ---------- */
+
+test('every screen offers the five spots a person would name', () => {
+  const spots = destinations(habitatFrom(DESK));
+  assert.equal(spots.length, DESK.length * SPOTS.length);
+  assert.deepEqual(spots.slice(0, 5).map((s) => s.label), [
+    'the top-left of the Studio Display',
+    'the top-right of the Studio Display',
+    'the bottom-left of the Studio Display',
+    'the bottom-right of the Studio Display',
+    'the middle of the Studio Display',
+  ]);
+  // Every row resolves to a real display — a number is a row or it is nothing.
+  for (const s of spots) assert.ok(DESK.some((d) => d.id === s.displayId), s.label);
+});
+
+test('the terminal is offered as a landmark, not just a corner', () => {
+  const spots = destinations(habitatFrom(DESK, at(100, 100), at(2700, 700)));
+  const landmark = spots[spots.length - 1];
+  assert.match(landmark.label, /where the session's terminal is \(the MacBook screen\)/);
+  assert.equal(landmark.displayId, MACBOOK.id);
+});
+
+test('nowhere to go when there are no screens', () => {
+  assert.deepEqual(destinations(habitatFrom([])), []);
+  assert.deepEqual(destinations(null), []);
+});
+
+test('a chosen spot lands inside the work area, never under the menu bar', () => {
+  const world = habitatFrom(DESK);
+  for (const d of world.displays) {
+    for (const region of SPOTS) {
+      const { x, y } = spotFor(d, region, BUDDY, 6);
+      assert.ok(x >= d.workArea.x, `${d.name} ${region} x=${x}`);
+      assert.ok(y >= d.workArea.y, `${d.name} ${region} y=${y}`);
+      assert.ok(x + BUDDY.width <= d.workArea.x + d.workArea.width, `${d.name} ${region}`);
+      assert.ok(y + BUDDY.height <= d.workArea.y + d.workArea.height, `${d.name} ${region}`);
+    }
+  }
+});
+
+test('the corners are the corners, and the middle is centred', () => {
+  const [studio] = habitatFrom(DESK).displays;
+  const wa = studio.workArea;
+  assert.deepEqual(spotFor(studio, 'top-left', BUDDY, 6), { x: wa.x + 6, y: wa.y + 6 });
+  assert.deepEqual(spotFor(studio, 'bottom-right', BUDDY, 6), {
+    x: wa.x + wa.width - 6 - BUDDY.width,
+    y: wa.y + wa.height - 6 - BUDDY.height,
+  });
+  const mid = spotFor(studio, 'middle', BUDDY, 6);
+  assert.equal(mid.x + BUDDY.width / 2, wa.x + wa.width / 2);
+});
+
+test('a spot chosen on one screen is genuinely on that screen', () => {
+  // The round trip that matters: pick a destination, resolve it, and ask the
+  // habitat where that lands. It must be the display we asked for.
+  const world = habitatFrom(DESK);
+  for (const spot of destinations(world)) {
+    const display = world.displays.find((d) => d.id === spot.displayId);
+    const point = spotFor(display, spot.region, BUDDY, 6);
+    const landed = displayFor(DESK, { ...point, ...BUDDY });
+    assert.equal(landed.id, spot.displayId, spot.label);
+  }
 });

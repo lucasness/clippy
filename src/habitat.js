@@ -244,6 +244,7 @@ function habitatFrom(displays, windowBounds, terminalBounds) {
       terminal = {
         displayId: on.id,
         name: names.get(on.id),
+        region: whereOn(on, terminalBounds).region,
         // Whether the buddy can see it from where it stands, which is the only
         // thing that changes how you'd say it out loud.
         sameScreen: !!where && where.displayId === on.id,
@@ -287,16 +288,25 @@ function describePlace(world) {
   const said = new Set();
   const sentences = [];
 
+  // Sizes come along because the pet gets asked about them ("how big is my
+  // screen?"), and because "the big one" is how people refer to a display.
+  const sizeOf = (id) => {
+    const d = displays.find((x) => x.id === id);
+    return d ? ` (${d.bounds.width}×${d.bounds.height})` : '';
+  };
+
   if (where) {
     said.add(where.displayId);
     const spot = where.region === 'middle' ? 'in the middle of' : `near the ${where.region} of`;
     const only = displays.length === 1 ? ', the only screen there is' : '';
-    sentences.push(`You are standing ${spot} the ${where.name}${only}.`);
+    sentences.push(`You are standing ${spot} the ${where.name}${sizeOf(where.displayId)}${only}.`);
 
     const near = exits.filter((n) => n.from === where.displayId);
     if (near.length) {
       for (const n of near) said.add(n.to);
-      const listed = listOf(near.map((n) => `the ${nameOf(n.to)} is ${SIDE_WORDS[n.side]}`));
+      const listed = listOf(
+        near.map((n) => `the ${nameOf(n.to)}${sizeOf(n.to)} is ${SIDE_WORDS[n.side]}`)
+      );
       sentences.push(`${listed[0].toUpperCase()}${listed.slice(1)}.`);
     }
   }
@@ -325,6 +335,75 @@ function describePlace(world) {
   return sentences.join(' ');
 }
 
+/**
+ * The spots a person actually names: the four corners and the middle. Not all
+ * nine regions `whereOn` can report — "the left edge of the Studio Display" is
+ * something code computes for a patrol, not something anybody asks for out
+ * loud, and every extra row is a row the model has to read.
+ */
+const SPOTS = ['top-left', 'top-right', 'bottom-left', 'bottom-right', 'middle'];
+
+/**
+ * Everywhere a buddy could be sent, as an ordered list.
+ *
+ * Meant to be numbered by the caller and offered to the pet model the way
+ * delegate.js offers its roster: the answer is a row or it is nothing. A model
+ * asked for coordinates can return a plausible, wrong pixel — between two
+ * monitors, or off the bottom of a shorter one — and nothing downstream can
+ * tell that from a good answer. A row number either resolves or it doesn't,
+ * and the geometry stays here where it is exact.
+ *
+ * @param {object} world  habitatFrom's answer
+ * @returns {Array<{label:string,displayId:number,region:string}>}
+ */
+function destinations(world) {
+  if (!world || !world.displays.length) return [];
+  const out = [];
+  for (const d of world.displays) {
+    for (const region of SPOTS) {
+      out.push({ label: `the ${region} of the ${d.name}`, displayId: d.id, region });
+    }
+  }
+  // A landmark worth naming, because it is where the work is and the user is
+  // more likely to say "come over to my terminal" than to name a corner.
+  if (world.terminal) {
+    out.push({
+      label: `where the session's terminal is (the ${world.terminal.name})`,
+      displayId: world.terminal.displayId,
+      region: world.terminal.region,
+    });
+  }
+  return out;
+}
+
+/**
+ * A chosen destination as an actual top-left corner for the window.
+ *
+ * The work area rather than the raw bounds, so a corner is never under the
+ * menu bar or behind the dock — the same bargain arrange.js makes.
+ *
+ * @param {object} display   one of world.displays
+ * @param {string} region    a SPOTS value (anything else centres on that axis)
+ * @param {{width:number,height:number}} size  the buddy window
+ * @param {number} [gap]     breathing room from the edges
+ * @returns {{x:number,y:number}}
+ */
+function spotFor(display, region, size, gap = 0) {
+  const wa = display.workArea;
+  const name = String(region || '');
+  const x = name.includes('left')
+    ? wa.x + gap
+    : name.includes('right')
+      ? wa.x + wa.width - gap - size.width
+      : Math.round(wa.x + (wa.width - size.width) / 2);
+  const y = name.startsWith('top')
+    ? wa.y + gap
+    : name.startsWith('bottom')
+      ? wa.y + wa.height - gap - size.height
+      : Math.round(wa.y + (wa.height - size.height) / 2);
+  return { x, y };
+}
+
 module.exports = {
   friendlyNames,
   sharedEdge,
@@ -333,4 +412,7 @@ module.exports = {
   whereOn,
   habitatFrom,
   describePlace,
+  destinations,
+  spotFor,
+  SPOTS,
 };
