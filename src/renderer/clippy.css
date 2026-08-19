@@ -454,6 +454,34 @@ body.flipped #buddy-vector {
   transform: scaleX(-1);
 }
 
+/* Walking a vertical edge. Only packs that said `climbs` get here (see
+   canClimb() in clippy.js) — art drawn standing on its feet would just fall
+   over. The mirror still applies underneath, so a pack drawn facing the wrong
+   way climbs the right way up: scaleX first, then the quarter turn. */
+body.climb-up #buddy,
+body.climb-up #buddy-sheet,
+body.climb-up #buddy-vector {
+  transform: rotate(-90deg);
+}
+
+body.climb-down #buddy,
+body.climb-down #buddy-sheet,
+body.climb-down #buddy-vector {
+  transform: rotate(90deg);
+}
+
+body.flipped.climb-up #buddy,
+body.flipped.climb-up #buddy-sheet,
+body.flipped.climb-up #buddy-vector {
+  transform: rotate(-90deg) scaleX(-1);
+}
+
+body.flipped.climb-down #buddy,
+body.flipped.climb-down #buddy-sheet,
+body.flipped.climb-down #buddy-vector {
+  transform: rotate(90deg) scaleX(-1);
+}
+
 #pointer {
   display: flex;
   flex-direction: column;

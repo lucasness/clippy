@@ -105,6 +105,11 @@ const THEMES_DIR = path.join(__dirname, 'renderer', 'assets', 'themes');
  * Any single animation can override it (see `poses` below), because a sheet
  * that walks to the left often sits facing the viewer.
  *
+ * `climbs` (default false) says the art can be turned on its side, so a buddy
+ * walking up or down a screen edge is rotated to face the way it is going
+ * rather than sliding along sideways. Art drawn standing on its feet should
+ * leave this alone; art drawn from above — a snake, a crab — should set it.
+ *
  * Packs that put every animation in one grid — a row per animation, which is
  * how most pet sprite sheets ship — say so instead, and can name as many of the
  * poses as the sheet actually has:
@@ -152,6 +157,10 @@ function customThemes(dir = THEMES_DIR) {
         // 'center' is art drawn facing the viewer: mirroring it says nothing,
         // so it is left alone whichever way the buddy is headed.
         facing: facing(raw.facing) || 'right',
+        // Whether this art survives being turned on its side. A pet drawn from
+        // above — a snake, a crab — reads fine walking up a wall; one drawn
+        // standing on its feet just falls over. Opt in, per pack.
+        climbs: raw.climbs === true,
       });
     } else {
       console.warn(`clippy: ignoring themes/${entry.name} — theme.json is incomplete`);

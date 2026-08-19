@@ -277,10 +277,39 @@ function perimeterLap(display, size, from = null, perSide = 3) {
   return [...ring.slice(best), ...ring.slice(0, best)];
 }
 
+/**
+ * Which way a buddy faces on one leg of a walk, and whether it is climbing.
+ *
+ * A leg straight up or down contains no left or right, so asking "is the
+ * target further left?" answers "no" and points him right every time — which
+ * is why a buddy going up the left edge walked it backwards. On a vertical leg
+ * he keeps the wall he is on instead: the edge is the thing he is holding, so
+ * the near side of the display is the way he looks.
+ *
+ * @param {{x:number,y:number}} from
+ * @param {{x:number,y:number}} to
+ * @param {{x:number,width:number}} workArea  the display he is walking on
+ * @param {number} [width]  the buddy window's width, so "which half" is about him
+ * @returns {{facing:'left'|'right', climb:'up'|'down'|null}}
+ */
+function headingFor(from, to, workArea, width = 0) {
+  const dx = (to.x || 0) - (from.x || 0);
+  const dy = (to.y || 0) - (from.y || 0);
+  if (Math.abs(dy) > Math.abs(dx)) {
+    const middle = workArea ? workArea.x + workArea.width / 2 : 0;
+    return {
+      facing: (to.x || 0) + width / 2 < middle ? 'left' : 'right',
+      climb: dy < 0 ? 'up' : 'down',
+    };
+  }
+  return { facing: dx < 0 ? 'left' : 'right', climb: null };
+}
+
 module.exports = {
   canStandAt,
   nearestSpot,
   perimeterLap,
+  headingFor,
   displayPath,
   portalPoint,
   routeBetween,

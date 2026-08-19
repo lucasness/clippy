@@ -84,6 +84,7 @@ const {
   nearestSpot,
   walkMsFor,
   perimeterLap,
+  headingFor,
 } = require('./travel');
 
 const PORT = Number(process.env.CLIPPY_PORT || 43117);
@@ -1944,7 +1945,15 @@ function strollPath(buddy, from, legs, done) {
       standing = leg;
       return step();
     }
-    send(buddy, { kind: 'walk', facing: leg.x < standing.x ? 'left' : 'right' });
+    // Which way he is going, and which way that means he faces.
+    //
+    // A leg straight up or down has no left or right in it, and asking "is the
+    // target further left?" of one answers "no" — which pointed him right
+    // every time he climbed. Going up a wall he keeps the wall he is on: the
+    // edge is what he is holding, so that is the way he looks.
+    const { workArea } = screen.getDisplayMatching({ x: leg.x, y: leg.y, width, height });
+    const { facing, climb } = headingFor(standing, leg, workArea, width);
+    send(buddy, { kind: 'walk', facing, climb });
     strollTo(
       buddy,
       standing,

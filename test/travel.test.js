@@ -216,3 +216,51 @@ test('a screen too small for the buddy still gives a lap, not a crash', () => {
     assert.ok(spot.x >= 0 && spot.y >= 0, JSON.stringify(spot));
   }
 });
+
+/* ---------- Which way he faces ---------- */
+
+const { headingFor } = require('../src/travel');
+const WA = STUDIO.workArea;
+
+test('walking across, he faces the way he is going', () => {
+  assert.deepEqual(headingFor({ x: 900, y: 500 }, { x: 200, y: 500 }, WA, 124), {
+    facing: 'left',
+    climb: null,
+  });
+  assert.deepEqual(headingFor({ x: 200, y: 500 }, { x: 900, y: 500 }, WA, 124), {
+    facing: 'right',
+    climb: null,
+  });
+});
+
+test('going straight up or down is a climb, not a shrug to the right', () => {
+  // The bug this exists to stop: a vertical leg has no left or right in it, so
+  // "is the target further left?" answers no and used to point him right.
+  const up = headingFor({ x: 0, y: 900 }, { x: 0, y: 200 }, WA, 124);
+  assert.equal(up.climb, 'up');
+  assert.equal(up.facing, 'left', 'climbing the left edge, he holds the left edge');
+
+  const down = headingFor({ x: 2436, y: 200 }, { x: 2436, y: 900 }, WA, 124);
+  assert.equal(down.climb, 'down');
+  assert.equal(down.facing, 'right', 'climbing the right edge, he holds the right edge');
+});
+
+test('a mostly-sideways leg is a walk, a mostly-vertical one is a climb', () => {
+  assert.equal(headingFor({ x: 0, y: 0 }, { x: 300, y: 100 }, WA, 124).climb, null);
+  assert.equal(headingFor({ x: 0, y: 0 }, { x: 100, y: 300 }, WA, 124).climb, 'down');
+});
+
+test('a lap of the edge faces sensibly the whole way round', () => {
+  const lap = perimeterLap(STUDIO, BUDDY);
+  let standing = lap[lap.length - 1];
+  for (const spot of lap) {
+    const { facing, climb } = headingFor(standing, spot, WA, BUDDY.width);
+    assert.ok(facing === 'left' || facing === 'right', JSON.stringify(spot));
+    // Whenever he is climbing, he is holding the edge he is actually on.
+    if (climb) {
+      const nearLeft = spot.x + BUDDY.width / 2 < WA.x + WA.width / 2;
+      assert.equal(facing, nearLeft ? 'left' : 'right');
+    }
+    standing = spot;
+  }
+});

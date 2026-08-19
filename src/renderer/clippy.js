@@ -448,6 +448,13 @@ function currentVector() {
 
 let heading = null; // 'left' | 'right' — where he's actively looking, if anywhere
 let side = 'right'; // which half of the screen he's parked on, per main
+let climb = null; // 'up' | 'down' while walking a vertical edge, else null
+
+/** Whether this pack said its art can be turned on its side. */
+function canClimb() {
+  const who = (settings.characters || []).find((c) => c.id === settings.character);
+  return Boolean(who?.climbs);
+}
 
 /** Which way the current character's current pose is drawn. */
 function drawnFacing() {
@@ -464,14 +471,20 @@ function applyFacing() {
   const want = heading || restHeading();
   const drawn = drawnFacing();
   document.body.classList.toggle('flipped', drawn !== 'center' && want !== drawn);
+  // Turning on his side is opt-in per pack: art drawn standing on its feet
+  // would simply fall over, so it walks the edge upright instead.
+  const turning = climb && canClimb();
+  document.body.classList.toggle('climb-up', turning === 'up');
+  document.body.classList.toggle('climb-down', turning === 'down');
 }
 
 /**
  * Point the buddy somewhere — 'left', 'right', or null to let him settle back
  * to facing into the screen.
  */
-function face(want) {
+function face(want, going = null) {
   heading = want === 'left' || want === 'right' ? want : null;
+  climb = going === 'up' || going === 'down' ? going : null;
   applyFacing();
 }
 
@@ -2495,7 +2508,7 @@ function handleEvent(evt) {
       document.body.classList.add('walking');
       // A missing heading means "stand as you were drawn" — that's how the end
       // of a stroll puts him back to his usual stance.
-      face(evt.facing === 'left' || evt.facing === 'right' ? evt.facing : null);
+      face(evt.facing === 'left' || evt.facing === 'right' ? evt.facing : null, evt.climb);
       refreshPose();
       clearTimeout(walkTimer);
       // Safety net: if the walk event that ends this one never lands, don't
