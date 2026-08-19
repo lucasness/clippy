@@ -77,7 +77,8 @@ const { createOutbox } = require('./outbox');
 const { createFocusProbe, looksFocused } = require('./frontmost');
 const { describeSource } = require('./source-app');
 const { routingPrompt, parseChoice, routable } = require('./delegate');
-const { habitatFrom, describePlace } = require('./habitat');
+const { habitatFrom, describePlace, destinations, spotFor } = require('./habitat');
+const { routeBetween, canStandAt, nearestSpot, walkMsFor } = require('./travel');
 
 const PORT = Number(process.env.CLIPPY_PORT || 43117);
 let installingUpdate = false;
@@ -1203,9 +1204,16 @@ function placeBuddy(buddy, mode, wantHeight, wantWidth) {
   if (Number.isFinite(wantWidth)) buddy.wantWidth = wantWidth > 0 ? wantWidth : 0;
   const compact = mode === 'compact';
   const [compactW, compactH] = compactSize(buddy);
-  const workArea = buddy.dock
-    ? screen.getDisplayMatching(buddy.dock.bounds).workArea
-    : screen.getPrimaryDisplay().workArea;
+  // A buddy standing somewhere of its own — dragged there, or walked there —
+  // is measured against the screen it is actually on. Using the perch's
+  // display instead would drag it back the moment anything repositioned it,
+  // which is what stopped a buddy from living on a different monitor from the
+  // terminal it watches.
+  const workArea = buddy.dragged
+    ? screen.getDisplayMatching(buddy.win.getBounds()).workArea
+    : buddy.dock
+      ? screen.getDisplayMatching(buddy.dock.bounds).workArea
+      : screen.getPrimaryDisplay().workArea;
   const width = compact
     ? compactW
     : Math.round(
@@ -1869,9 +1877,15 @@ function pointAtPrompt(key) {
   });
 }
 
-/** Step a window from one spot to another, easing in and out. */
-function strollTo(buddy, from, to, done) {
-  const steps = Math.max(1, Math.round(WALK_MS / WALK_FRAME_MS));
+/**
+ * Step a window from one spot to another, easing in and out.
+ *
+ * `ms` lets a journey across the desk move at a speed rather than always
+ * taking the same time as the short walk to a prompt; leaving it out keeps
+ * that original walk exactly as it was.
+ */
+function strollTo(buddy, from, to, done, ms = WALK_MS) {
+  const steps = Math.max(1, Math.round(ms / WALK_FRAME_MS));
   let i = 0;
   const { width, height } = buddy.win.getBounds();
   buddy.walk.timer = setInterval(() => {
@@ -1891,6 +1905,98 @@ function strollTo(buddy, from, to, done) {
       done();
     }
   }, WALK_FRAME_MS);
+}
+
+/**
+ * Walk a whole journey: one leg at a time, facing the way it is going.
+ *
+ * A leg marked `crossing` is not walked but stepped — the window lands on the
+ * far side of the boundary in one move. Two displays with different scale
+ * factors cannot survive a window straddling them, and the jump reads as the
+ * pet squeezing through a gap rather than as a glitch.
+ *
+ * Anything that needs the window back calls stopWalking, which drops
+ * `buddy.walk`; every step checks for that, so a card arriving mid-journey
+ * ends the trip where it stands. Travel never outranks the job.
+ */
+function strollPath(buddy, from, legs, done) {
+  let standing = from;
+  let i = 0;
+  const step = () => {
+    if (!buddy.walk || buddy.win.isDestroyed()) return;
+    if (i >= legs.length) return done();
+    const leg = legs[i];
+    i += 1;
+    const { width, height } = buddy.win.getBounds();
+    if (leg.crossing) {
+      setBuddyBounds(buddy, { x: leg.x, y: leg.y, width, height });
+      standing = leg;
+      return step();
+    }
+    send(buddy, { kind: 'walk', facing: leg.x < standing.x ? 'left' : 'right' });
+    strollTo(
+      buddy,
+      standing,
+      leg,
+      () => {
+        standing = leg;
+        step();
+      },
+      walkMsFor(standing, leg)
+    );
+  };
+  step();
+}
+
+/**
+ * Send a buddy somewhere, by coordinate.
+ *
+ * Any spot may be asked for; travel.js decides whether it is somewhere a
+ * window could sit and pulls it back onto a screen if not, so nothing here can
+ * strand a buddy in the gap between two monitors. Once it arrives it counts as
+ * placed by hand — it stays where it was sent rather than snapping back to its
+ * perch the next time anything repositions it.
+ *
+ * @returns {boolean} whether a journey was actually started
+ */
+function travelTo(buddy, to, done) {
+  if (!buddy || buddy.win.isDestroyed() || !buddy.win.isVisible()) return false;
+  const from = buddy.win.getBounds();
+  const world = habitatFrom(screen.getAllDisplays(), from, buddy.dock?.bounds);
+  const trip = routeBetween(world, from, to);
+  if (!trip.ok || !trip.legs.length) return false;
+
+  stopWalking(buddy);
+  buddy.walk = { phase: 'travel', timer: null, hold: null };
+  strollPath(buddy, from, trip.legs, () => {
+    stopWalking(buddy);
+    // Where it was sent is where it stays: the same standing this buddy would
+    // have if you had dragged it there yourself.
+    buddy.dragged = true;
+    if (done) done();
+  });
+  return true;
+}
+
+/**
+ * A screen appeared, vanished, or changed shape.
+ *
+ * Any journey in flight was routed across an arrangement that no longer
+ * exists, so it ends now rather than walking to a doorway that has gone. A
+ * buddy left somewhere impossible — the usual case being the monitor it was
+ * standing on getting unplugged — is put back on a screen it can be seen on.
+ */
+function rehomeAfterDisplayChange() {
+  const displays = screen.getAllDisplays();
+  for (const buddy of buddies.values()) {
+    if (!buddy || buddy.win.isDestroyed()) continue;
+    if (buddy.walk) stopWalking(buddy);
+    const bounds = buddy.win.getBounds();
+    const world = habitatFrom(displays, bounds);
+    if (canStandAt(world, bounds).ok) continue;
+    const spot = nearestSpot(world, bounds);
+    if (spot) setBuddyBounds(buddy, { ...spot, width: bounds.width, height: bounds.height });
+  }
 }
 
 function stopWalking(buddy) {
@@ -2742,6 +2848,41 @@ function showUsageFor(key) {
   showBuddy(key, { pin: true });
 }
 
+/**
+ * "Walk over to…" — somewhere for the buddy to go, chosen by hand.
+ *
+ * Dragging a buddy to another monitor works, but it means picking up a small
+ * window and carrying it across a desk's worth of screen. This is the same
+ * journey travelTo will make when it is asked in words, minus the asking, and
+ * it is how the walking gets used by anybody who never types at the pet.
+ *
+ * Offered even on a single screen, where it is still the easy way to send a
+ * buddy to a corner without picking it up.
+ */
+function walkToMenu(buddy) {
+  if (!buddy || buddy.win.isDestroyed()) return [];
+  const bounds = buddy.win.getBounds();
+  const world = habitatFrom(screen.getAllDisplays(), bounds, buddy.dock?.bounds);
+  if (!world.displays.length) return [];
+  const size = { width: bounds.width, height: bounds.height };
+  return [
+    { type: 'separator' },
+    {
+      label: 'Walk over to',
+      submenu: destinations(world).map((spot) => {
+        const display = world.displays.find((d) => d.id === spot.displayId);
+        return {
+          label: spot.label,
+          click: () => {
+            showBuddy(buddy.sessionId, { pin: true });
+            travelTo(buddy, spotFor(display, spot.region, size, WIN_GAP));
+          },
+        };
+      }),
+    },
+  ];
+}
+
 function trayMenu() {
   const attention = attentionItems();
   const sessionItems = [...buddies.values()].map((b) => ({
@@ -2761,6 +2902,7 @@ function trayMenu() {
       ...(b.dock
         ? [{ label: 'Unperch', click: () => hideBuddy(b.sessionId, { unpin: true }) }]
         : []),
+      ...walkToMenu(b),
     ],
   }));
 
@@ -4222,6 +4364,11 @@ app.whenReady().then(async () => {
   // per run; the tray menu keeps the same action for later.
   if (hooksAbsent) offerHookInstall();
   setInterval(sweepStaleSessions, SWEEP_INTERVAL_MS).unref?.();
+  // The arena can change under a buddy's feet: a monitor plugged in, unplugged,
+  // rearranged in System Settings, or its resolution changed.
+  for (const change of ['display-added', 'display-removed', 'display-metrics-changed']) {
+    screen.on(change, rehomeAfterDisplayChange);
+  }
 
   ipcMain.handle('clippy-context', async (e) => {
     const buddy = buddyForSender(e.sender);

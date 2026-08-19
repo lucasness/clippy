@@ -207,4 +207,36 @@ function routeBetween(world, from, to) {
   return { ok: true, legs, adjusted, reason: adjusted ? 'pulled back on screen' : '' };
 }
 
-module.exports = { canStandAt, nearestSpot, displayPath, portalPoint, routeBetween };
+/**
+ * How long a leg should take.
+ *
+ * A fixed duration per leg is what the point-at-prompt walk uses, and it is
+ * right there because the distance is always about the same. Across a desk it
+ * is wrong in both directions: a hop to the next corner crawls, and a march
+ * across two monitors arrives too fast to read as walking. So a journey moves
+ * at a speed instead, with a floor so short legs are still visible and a
+ * ceiling so a wide arrangement doesn't become a wait.
+ */
+const WALK_SPEED = 420; // pixels per second
+const MIN_WALK_MS = 260;
+const MAX_WALK_MS = 2400;
+
+function walkMsFor(from, to, speed = WALK_SPEED) {
+  const dx = (to.x || 0) - (from.x || 0);
+  const dy = (to.y || 0) - (from.y || 0);
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  const ms = (distance / Math.max(1, speed)) * 1000;
+  return Math.round(clamp(ms, MIN_WALK_MS, MAX_WALK_MS));
+}
+
+module.exports = {
+  canStandAt,
+  nearestSpot,
+  displayPath,
+  portalPoint,
+  routeBetween,
+  walkMsFor,
+  WALK_SPEED,
+  MIN_WALK_MS,
+  MAX_WALK_MS,
+};

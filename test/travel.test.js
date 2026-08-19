@@ -144,3 +144,23 @@ test('no screens, no journey', () => {
   assert.equal(canStandAt(empty, at(0, 0)).ok, false);
   assert.equal(nearestSpot(empty, at(0, 0)), null);
 });
+
+/* ---------- How long a leg takes ---------- */
+
+const { walkMsFor, MIN_WALK_MS, MAX_WALK_MS } = require('../src/travel');
+
+test('a journey moves at a speed, not a fixed time per leg', () => {
+  const short = walkMsFor({ x: 0, y: 0 }, { x: 400, y: 0 });
+  const long = walkMsFor({ x: 0, y: 0 }, { x: 1600, y: 0 });
+  assert.ok(long > short, `${short} -> ${long}`);
+});
+
+test('a short hop is still long enough to see, a long march still ends', () => {
+  assert.equal(walkMsFor({ x: 0, y: 0 }, { x: 2, y: 0 }), MIN_WALK_MS);
+  assert.equal(walkMsFor({ x: 0, y: 0 }, { x: 99999, y: 0 }), MAX_WALK_MS);
+});
+
+test('distance is the diagonal, not one axis', () => {
+  // 3-4-5: the diagonal of 300×400 is 500, so it takes as long as a flat 500.
+  assert.equal(walkMsFor({ x: 0, y: 0 }, { x: 300, y: 400 }), walkMsFor({ x: 0, y: 0 }, { x: 500, y: 0 }));
+});
