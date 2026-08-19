@@ -33,9 +33,14 @@ const POSES = [
   'wave', // hello — this session just started
 ];
 
+// Poses beyond the shared vocabulary. A character may know one without every
+// other character having to learn it: the renderer falls back (climb -> walk)
+// for anyone who doesn't, so this stays additive.
+const CLIMB = 'climb'; // going up or down a screen edge, while roaming
+
 const CHARACTERS = [
   { id: 'clip', label: 'Clippy', poses: POSES, perColour: true },
-  { id: 'cat', label: 'Pixel cat', poses: POSES },
+  { id: 'cat', label: 'Pixel cat', poses: [...POSES, CLIMB] },
   // A squat terracotta box in the spirit of a certain mascot — he was already
   // pixel art, so this is a transcription; the name keeps a polite distance.
   // One colour, like the cat: Clod is that orange.

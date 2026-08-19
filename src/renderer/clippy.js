@@ -411,7 +411,9 @@ function buddyArt(pose) {
 function poseFor(name) {
   const character = (settings.characters || []).find((c) => c.id === settings.character);
   const has = character && (character.sheet ? character.sheet.poses : toSet(character.poses));
-  for (const want of [name, 'excited', 'idle']) {
+  // A character with no climb of its own walks the edge instead — falling
+  // straight through to 'excited' would have it cheering its way up a wall.
+  for (const want of [name, ...(name === 'climb' ? ['walk'] : []), 'excited', 'idle']) {
     if (!has || has[want]) return want;
   }
   return 'idle';
@@ -473,7 +475,11 @@ function applyFacing() {
   document.body.classList.toggle('flipped', drawn !== 'center' && want !== drawn);
   // Turning on his side is opt-in per pack: art drawn standing on its feet
   // would simply fall over, so it walks the edge upright instead.
-  const turning = climb && canClimb();
+  // Two ways to face up a wall. Art drawn climbing simply plays; art that only
+  // has a walk cycle is turned on its side, and only if its pack said it could
+  // survive that. A character with both never gets rotated on top of its own
+  // drawing.
+  const turning = climb && canClimb() && pose !== 'climb' ? climb : null;
   document.body.classList.toggle('climb-up', turning === 'up');
   document.body.classList.toggle('climb-down', turning === 'down');
 }
@@ -537,7 +543,9 @@ const SULK_AFTER_MS = 5 * 60 * 1000;
 let waitingSince = 0;
 
 function poseForState() {
-  if (document.body.classList.contains('walking')) return 'walk';
+  // Going up or down a screen edge has its own animation for characters drawn
+  // with one; poseFor falls back to the walking pose for everyone else.
+  if (document.body.classList.contains('walking')) return climb ? 'climb' : 'walk';
   if (pettedUntil > Date.now()) return 'cheer'; // you just double-clicked him
   if (clickedUntil > Date.now()) return 'wave'; // you just clicked him once
   if (pointing) return 'point';

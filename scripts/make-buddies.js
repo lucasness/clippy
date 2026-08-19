@@ -379,6 +379,73 @@ function drawCatWalk({ step = 0, bob = 0, blink = false } = {}) {
   return g;
 }
 
+/**
+ * The cat going up a wall: the same animal turned to face the climb.
+ *
+ * Not the walk cycle rotated — a rotated sprite is a sprite lying on its side,
+ * and it reads as a cat that has fallen over. A climbing animal is drawn
+ * climbing: nose up, body stretched vertically along the edge, and all four
+ * legs reaching out to the same side, where the wall is. The renderer mirrors
+ * the whole thing for the other edge, so this is only ever drawn gripping to
+ * the right.
+ *
+ * @param {number} opts.step   0-3 through the climb cycle
+ * @param {number} opts.reach  1 = the body stretches a pixel up the wall
+ * @param {boolean} opts.blink
+ */
+function drawCatClimb({ step = 0, reach = 0, blink = false } = {}) {
+  const g = grid();
+  const dy = -reach; // the body inches upward; the gripping paws stay put
+
+  // Legs first so the body covers their roots, and out to the right, where the
+  // wall is. Two pairs out of phase: as one pair pulls, the other reaches.
+  const pull = [
+    [-2, 2],
+    [0, 0],
+    [2, -2],
+    [0, 0],
+  ][step % 4];
+  const LEGS = [
+    [16, 0],
+    [21, 1],
+    [26, 0],
+    [31, 1],
+  ];
+  for (const [y, phase] of LEGS) {
+    const swing = pull[phase];
+    rect(g, 17, y + dy, 20, y + 1 + dy, FUR); // thigh, out from the body
+    rect(g, 20, y + swing + dy, 23, y + 1 + swing + dy, FUR); // shin, reaching
+    rect(g, 23, y + swing - 1 + dy, 24, y + 2 + swing + dy, CREAM); // paw, gripping
+  }
+
+  blob(g, 8, 12 + dy, 19, 34 + dy, FUR, 4); // body, stretched up the wall
+  blob(g, 13, 15 + dy, 19, 32 + dy, CREAM, 2); // belly, against the wall
+  rect(g, 10, 17 + dy, 11, 18 + dy, DARK); // tabby stripes, across the back now
+  rect(g, 10, 23 + dy, 11, 24 + dy, DARK);
+
+  // Tail hanging down and curling away — a counterweight, not carried high.
+  for (const [x, y] of [[8, 33], [6, 34], [4, 32]]) {
+    rect(g, x, y + dy, x + 2, y + 2 + dy, FUR);
+  }
+  rect(g, 4, 31 + dy, 5, 32 + dy, DARK); // dipped tip
+
+  // Head at the top, nose up the way it is going.
+  blob(g, 8, 4 + dy, 18, 15 + dy, FUR, 3);
+  ear(g, 8, 5 + dy, 5, 5, FUR); // the ear that shows, back from the muzzle
+  ear(g, 9, 7 + dy, 3, 3, PINK);
+  blob(g, 12, 2 + dy, 17, 8 + dy, CREAM, 1); // muzzle, pointed skyward
+  put(g, 14, 2 + dy, PINK); // nose at the very tip
+
+  if (blink) rect(g, 10, 10 + dy, 13, 10 + dy, INK);
+  else {
+    blob(g, 9, 8 + dy, 14, 13 + dy, EYE, 1);
+    rect(g, 11, 9 + dy, 12, 11 + dy, INK);
+  }
+
+  outline(g);
+  return g;
+}
+
 /* ---------------- The paperclip, in pixels ---------------- */
 
 // Same slots as the cat's palette so one ASCII legend covers both; the wire
@@ -1063,6 +1130,14 @@ const CAT_POSES = {
     { indices: drawCat({ tail: 3, paw: 2, happy: true, tilt: 1 }), delayMs: 200 },
     { indices: drawCat({ tail: 3, paw: 2, happy: true, tilt: -1 }), delayMs: 200 },
     { indices: drawCat({ tail: 3, paw: 1, happy: true, tilt: 1 }), delayMs: 200 },
+  ],
+  // Up a screen edge: the gripping paws alternate and the body inches after
+  // them, so he climbs rather than sliding upward in a walking pose.
+  climb: [
+    { indices: drawCatClimb({ step: 0, reach: 0 }), delayMs: 150 },
+    { indices: drawCatClimb({ step: 1, reach: 1 }), delayMs: 150 },
+    { indices: drawCatClimb({ step: 2, reach: 0 }), delayMs: 150 },
+    { indices: drawCatClimb({ step: 3, reach: 1, blink: true }), delayMs: 150 },
   ],
 };
 
