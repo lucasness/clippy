@@ -77,6 +77,7 @@ const { createOutbox } = require('./outbox');
 const { createFocusProbe, looksFocused } = require('./frontmost');
 const { describeSource } = require('./source-app');
 const { routingPrompt, parseChoice, routable } = require('./delegate');
+const { habitatFrom, describePlace } = require('./habitat');
 
 const PORT = Number(process.env.CLIPPY_PORT || 43117);
 let installingUpdate = false;
@@ -2534,6 +2535,23 @@ async function restoreSpawned() {
 }
 
 /**
+ * Where this buddy is standing, in words the prompt can carry.
+ *
+ * Measured at the moment it is asked rather than cached: displays come and go
+ * and the window is draggable, so a remembered answer is a wrong one waiting
+ * to happen. Never throws — a pet that cannot find itself simply says nothing
+ * about where it is, which is what it did before any of this existed.
+ */
+function placeOf(buddy) {
+  try {
+    if (!buddy?.win || buddy.win.isDestroyed()) return '';
+    return describePlace(habitatFrom(screen.getAllDisplays(), buddy.win.getBounds()));
+  } catch {
+    return '';
+  }
+}
+
+/**
  * This buddy's pet model, made on demand.
  *
  * Shared by the chat and by routing — routing used to require that you had
@@ -2553,6 +2571,9 @@ function chatFor(buddy) {
         agent: agentDisplayName(buddy.agent),
         model: tracker.modelFor(buddy.sessionId),
         status: tracker.statusFor(buddy.sessionId),
+        // Read fresh like the rest: the buddy may have been dragged to another
+        // display — or a display may have been unplugged — mid-conversation.
+        place: placeOf(buddy),
       }),
     });
   }

@@ -43,6 +43,7 @@ const line = (value, max = 120) => String(value || '').replace(/\s+/g, ' ').trim
  * @param {string} ctx.agent      "Claude Code" / "Codex"
  * @param {string} [ctx.model]    the model that session is spending
  * @param {string} [ctx.status]   idle / working / waiting / needs_permission
+ * @param {string} [ctx.place]    where it is standing (see habitat.describePlace)
  */
 function petSystemPrompt(ctx = {}) {
   const pet = line(ctx.pet, 40) || 'Buddy';
@@ -51,11 +52,23 @@ function petSystemPrompt(ctx = {}) {
   const agent = line(ctx.agent, 40) || 'a coding agent';
   const model = line(ctx.model, 60);
   const status = line(ctx.status, 40);
+  const place = line(ctx.place, 300);
 
   return [
     `You are ${pet}, a small pixel-art ${character} who lives on the user's screen.`,
     `You sit on top of a coding session: ${agent} running in the folder "${project}"` +
       `${model ? `, on ${model}` : ''}${status ? `. That session is currently ${status}` : ''}.`,
+    // Where it actually is, when we can work it out: the pet used to have no
+    // way to answer "where are you?" except by making something up.
+    ...(place
+      ? [
+          '',
+          place,
+          'That is genuinely where you are — say so if you are asked, and do not',
+          'invent screens you have not been told about. You cannot walk there',
+          'yourself yet; the user can drag you anywhere they like.',
+        ]
+      : []),
     '',
     'You are the pet, not the agent. You do not write code, run commands, read',
     'files, or take on tasks — if the user wants work done, tell them cheerfully',
