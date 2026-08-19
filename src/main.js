@@ -2545,7 +2545,11 @@ async function restoreSpawned() {
 function placeOf(buddy) {
   try {
     if (!buddy?.win || buddy.win.isDestroyed()) return '';
-    return describePlace(habitatFrom(screen.getAllDisplays(), buddy.win.getBounds()));
+    // The perch, when there is one, is the session's own window — measured
+    // through Accessibility and kept current as it moves.
+    return describePlace(
+      habitatFrom(screen.getAllDisplays(), buddy.win.getBounds(), buddy.dock?.bounds)
+    );
   } catch {
     return '';
   }

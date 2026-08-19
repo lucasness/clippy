@@ -205,11 +205,16 @@ function whereOn(display, bounds) {
  * window is right now. Displays come sorted left to right so the description
  * reads the way the desk looks.
  *
+ * The buddy's own window and the terminal it is watching are located the same
+ * way, because "which screen is that on" is one question however it is asked.
+ *
  * @param {Array<object>} displays  what screen.getAllDisplays() returned
  * @param {{x:number,y:number,width:number,height:number}} [windowBounds]
- * @returns {{displays:Array<object>,neighbors:Array<object>,where:object|null}}
+ * @param {{x:number,y:number,width:number,height:number}} [terminalBounds]
+ *   the perched session's window, when Clippy has measured it
+ * @returns {{displays:Array,neighbors:Array,where:object|null,terminal:object|null}}
  */
-function habitatFrom(displays, windowBounds) {
+function habitatFrom(displays, windowBounds, terminalBounds) {
   const names = friendlyNames(displays);
   const described = [...displays]
     .sort((a, b) => a.bounds.x - b.bounds.x || a.bounds.y - b.bounds.y)
@@ -232,7 +237,21 @@ function habitatFrom(displays, windowBounds) {
     }
   }
 
-  return { displays: described, neighbors: neighbors(displays), where };
+  let terminal = null;
+  if (terminalBounds) {
+    const on = displayFor(displays, terminalBounds);
+    if (on) {
+      terminal = {
+        displayId: on.id,
+        name: names.get(on.id),
+        // Whether the buddy can see it from where it stands, which is the only
+        // thing that changes how you'd say it out loud.
+        sameScreen: !!where && where.displayId === on.id,
+      };
+    }
+  }
+
+  return { displays: described, neighbors: neighbors(displays), where, terminal };
 }
 
 /** How a neighbour reads from where the buddy is standing. */
@@ -263,7 +282,7 @@ function listOf(parts) {
  */
 function describePlace(world) {
   if (!world || !world.displays.length) return '';
-  const { displays, neighbors: exits, where } = world;
+  const { displays, neighbors: exits, where, terminal } = world;
   const nameOf = (id) => displays.find((d) => d.id === id)?.name || 'another screen';
   const said = new Set();
   const sentences = [];
@@ -280,6 +299,18 @@ function describePlace(world) {
       const listed = listOf(near.map((n) => `the ${nameOf(n.to)} is ${SIDE_WORDS[n.side]}`));
       sentences.push(`${listed[0].toUpperCase()}${listed.slice(1)}.`);
     }
+  }
+
+  // The session's own window, when Clippy is perched and has measured it.
+  // Worth saying because it is the thing the pet sits on top of: "the screen
+  // the work is on" is the most useful landmark it has.
+  if (terminal) {
+    said.add(terminal.displayId);
+    sentences.push(
+      terminal.sameScreen
+        ? "The session's terminal is on this screen too."
+        : `The session's terminal is over on the ${terminal.name}.`
+    );
   }
 
   // Screens the sentences above never mentioned: either the buddy's own

@@ -174,7 +174,7 @@ test('the whole habitat reads the way the desk looks', () => {
 
 test('no window means no where, not a crash', () => {
   assert.equal(habitatFrom(DESK).where, null);
-  assert.deepEqual(habitatFrom([]), { displays: [], neighbors: [], where: null });
+  assert.deepEqual(habitatFrom([]), { displays: [], neighbors: [], where: null, terminal: null });
 });
 
 /* ---------- Saying it out loud ---------- */
@@ -221,4 +221,28 @@ test('with no window to place, the desk is still described', () => {
 test('no screens at all is silence, not a broken sentence', () => {
   assert.equal(describePlace(habitatFrom([])), '');
   assert.equal(describePlace(null), '');
+});
+
+test('the pet is told which screen the work is on', () => {
+  // Buddy on the Studio, terminal over on the MacBook panel.
+  const said = describePlace(habitatFrom(DESK, at(100, 100), at(2700, 700)));
+  assert.match(said, /The session's terminal is over on the MacBook screen\./);
+});
+
+test('a terminal on the same screen is said differently', () => {
+  const said = describePlace(habitatFrom(DESK, at(100, 100), at(300, 300)));
+  assert.match(said, /terminal is on this screen too\./);
+  assert.doesNotMatch(said, /over on/);
+});
+
+test('a terminal Clippy has not measured is not guessed at', () => {
+  assert.equal(habitatFrom(DESK, at(100, 100)).terminal, null);
+  assert.doesNotMatch(describePlace(habitatFrom(DESK, at(100, 100))), /terminal/);
+});
+
+test('naming the terminal screen does not also list it as further off', () => {
+  const island = { ...STUDIO, id: 4, label: 'Sidecar', bounds: { x: 9000, y: 0, width: 1024, height: 768 } };
+  const said = describePlace(habitatFrom([...DESK, island], at(100, 100), at(9100, 100)));
+  assert.match(said, /terminal is over on the Sidecar\./);
+  assert.doesNotMatch(said, /Further off/);
 });
