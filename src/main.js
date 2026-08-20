@@ -1980,17 +1980,20 @@ function strollPath(buddy, from, legs, done) {
  *
  * @returns {boolean} whether a journey was actually started
  */
-function travelTo(buddy, to, done) {
+function travelTo(buddy, to, done, { fromRoam = false } = {}) {
   if (!buddy || buddy.win.isDestroyed() || !buddy.win.isVisible()) return false;
   const from = buddy.win.getBounds();
   const world = habitatFrom(screen.getAllDisplays(), from, buddy.dock?.bounds);
   const trip = routeBetween(world, from, to);
   if (!trip.ok || !trip.legs.length) return false;
 
-  stopWalking(buddy);
+  // Clearing the previous walk must not also call off the wander that asked
+  // for this one: stopWalking runs before `buddy.walk` exists, so from its
+  // side a roam leg is indistinguishable from something else interrupting.
+  stopWalking(buddy, { keepRoam: fromRoam });
   buddy.walk = { phase: 'travel', timer: null, hold: null };
   strollPath(buddy, from, trip.legs, () => {
-    stopWalking(buddy);
+    stopWalking(buddy, { keepRoam: fromRoam });
     // Where it was sent is where it stays: the same standing this buddy would
     // have if you had dragged it there yourself.
     buddy.dragged = true;
@@ -2055,11 +2058,11 @@ function rehomeAfterDisplayChange() {
   }
 }
 
-function stopWalking(buddy) {
+function stopWalking(buddy, { keepRoam = false } = {}) {
   // A wander is the only movement nobody asked for, so anything that takes the
-  // window back ends it too. Travel started *by* the wander re-arms its own
-  // timer in the callback below, so this only bites when something else calls.
-  if (buddy?.roam && !buddy.walk) stopRoaming(buddy);
+  // window back ends it too — a card, a perch, a drag, being put away. The one
+  // caller that does not mean that is the wander itself, walking its next leg.
+  if (buddy?.roam && !keepRoam) stopRoaming(buddy);
   if (!buddy?.walk) return;
   clearInterval(buddy.walk.timer);
   clearTimeout(buddy.walk.hold);
@@ -2929,10 +2932,13 @@ function startRoaming(buddy) {
   // Coming out is not instant: showing a buddy measures the terminal window
   // first so it can appear already perched, which resolves a moment later. So
   // the wander waits for the window rather than testing once and giving up.
-  buddy.roam = { timer: null, lap: [], at: 0, waits: 0 };
   // A perched buddy is holding on to a terminal; wandering means letting go,
   // and leaving it docked would have the perch poll dragging it back mid-lap.
+  // This comes FIRST: undocking runs stopWalking, which ends any wander in
+  // progress, and a wander claimed a line earlier would be the one it ended.
   if (buddy.dock) undock(buddy);
+  if (buddy.win.isDestroyed()) return;
+  buddy.roam = { timer: null, lap: [], at: 0, waits: 0 };
   buddy.roam.timer = setTimeout(() => roamStep(buddy), 1200);
 }
 
@@ -2971,14 +2977,21 @@ function roamStep(buddy) {
   buddy.roam.at += 1;
   if (!next) return stopRoaming(buddy);
 
-  const walked = travelTo(buddy, next, () => {
-    if (!buddy.roam) return;
-    const wait = ROAM_PAUSE_MS + Math.floor(Math.random() * ROAM_PAUSE_JITTER_MS);
-    buddy.roam.timer = setTimeout(() => roamStep(buddy), wait);
-  });
+  const walked = travelTo(
+    buddy,
+    next,
+    () => {
+      if (!buddy.roam) return; // something took the window while he walked
+      const wait = ROAM_PAUSE_MS + Math.floor(Math.random() * ROAM_PAUSE_JITTER_MS);
+      buddy.roam.timer = setTimeout(() => roamStep(buddy), wait);
+    },
+    { fromRoam: true }
+  );
   // Somewhere it could not go — a display just vanished, most likely. Wait and
   // work it out again from wherever it actually is.
-  if (!walked) buddy.roam.timer = setTimeout(() => roamStep(buddy), ROAM_PAUSE_MS);
+  if (!walked && buddy.roam) {
+    buddy.roam.timer = setTimeout(() => roamStep(buddy), ROAM_PAUSE_MS);
+  }
 }
 
 /** Everybody stops wandering — the setting went off, or something needs the screen. */
@@ -4939,6 +4952,12 @@ app.whenReady().then(async () => {
         slot: b.slot,
         visible: !b.win.isDestroyed() && b.win.isVisible(),
         pinned: b.pinned,
+        // Where he actually is, and whether he is going anywhere. Movement is
+        // the one part of Clippy with no test that can watch it — the window
+        // is the output — so the debugging endpoint is where you look instead.
+        at: b.win.isDestroyed() ? null : b.win.getBounds(),
+        walking: Boolean(b.walk),
+        roaming: Boolean(b.roam),
       })),
       ...(hookDrift ? { hookDrift } : {}),
     }),
