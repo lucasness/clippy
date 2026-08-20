@@ -229,6 +229,14 @@ function SHOW_RUN() {
   });
   at(7000, { action: { do: 'dock', value: false } });
 
+  // Idle roaming: instead of being put away when nothing wants him, he stays
+  // out and walks the edge. The vertical legs are the point — the climb pose
+  // and the wall he holds on the way up appear nowhere else.
+  at(900, {
+    note: 'Idle roaming — he stays out and potters round the edge of the screen',
+    action: { do: 'roam' },
+  });
+
   // The cast, shown while a nudge has him bouncing, so it's the excited
   // animation you see rather than the calm one.
   at(400, {

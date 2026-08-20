@@ -115,6 +115,16 @@ const DEV_SCENARIOS = [
     ],
   },
   {
+    id: 'climbing',
+    group: 'Ambient',
+    label: 'Climbing an edge',
+    hint: 'The pose a roaming buddy walks a vertical edge in — characters without one walk it upright.',
+    // The renderer's dev pose hook: a grid cell has no window to walk, so the
+    // animation itself is the thing worth looking at. Idle roaming's horizontal
+    // legs are in the show run, which has a stage to move across.
+    events: [evt({ kind: 'pose', pose: 'climb' })],
+  },
+  {
     id: 'nudge-urgent',
     group: 'Nudges',
     label: 'Needs you (urgent)',

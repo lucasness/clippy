@@ -257,6 +257,9 @@ function runAction(action) {
     case 'walk-to-prompt':
       walkToPrompt();
       break;
+    case 'roam':
+      roamTheEdge();
+      break;
     case 'poke-menu':
       send('poke-menu', { item: action.item });
       break;
@@ -303,6 +306,56 @@ function walkToPrompt() {
       dockFrame();
     }, WALK_MS * 2 + POINT_MS),
   ];
+}
+
+/**
+ * The bench's stand-in for idle roaming (startRoaming in src/main.js): a lap of
+ * the stage's edge, one leg at a time.
+ *
+ * Main computes the lap from the real display's work area (perimeterLap in
+ * src/travel.js) and walks it with the window; here the stage stands in for the
+ * screen and the browser tweens between the same four corners. What matters is
+ * that this is the one place the *vertical* legs are visible — the climb pose
+ * and the wall a buddy holds on the way up only ever appear during a roam.
+ */
+function roamTheEdge() {
+  if (desktop.classList.contains('docked')) setDocked(false);
+  const stage = desktop.getBoundingClientRect();
+  const w = frame.offsetWidth;
+  const h = frame.offsetHeight;
+  const gap = 12;
+  const right = Math.max(gap, stage.width - w - gap);
+  const bottom = Math.max(gap, stage.height - h - gap);
+
+  // Along the top, down the right, back along the bottom, up the left — the
+  // same ring perimeterLap() hands main, and the same order.
+  const lap = [
+    { x: right, y: gap, facing: 'right', climb: null },
+    { x: right, y: bottom, facing: 'right', climb: 'down' },
+    { x: gap, y: bottom, facing: 'left', climb: null },
+    { x: gap, y: gap, facing: 'left', climb: 'up' },
+  ];
+
+  frame.style.right = 'auto';
+  frame.style.bottom = 'auto';
+  frame.style.transition = `left ${WALK_MS}ms ease-in-out, top ${WALK_MS}ms ease-in-out`;
+
+  walkTimers.forEach(clearTimeout);
+  walkTimers = lap.map((leg, i) =>
+    setTimeout(() => {
+      send('event', { kind: 'walk', facing: leg.facing, climb: leg.climb });
+      frame.style.left = `${leg.x}px`;
+      frame.style.top = `${leg.y}px`;
+      log('out', 'walk', leg.climb ? `climbing ${leg.climb} the edge` : `walking ${leg.facing}`);
+    }, i * (WALK_MS + 200))
+  );
+  walkTimers.push(
+    setTimeout(() => {
+      send('event', { kind: 'walk', facing: null, climb: null });
+      frame.style.transition = '';
+      log('out', 'walk', 'settled');
+    }, lap.length * (WALK_MS + 200))
+  );
 }
 
 function describeEvent(e) {

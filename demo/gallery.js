@@ -20,7 +20,7 @@ const COMPACT_H = 200;
 // States whose whole point is the window physically travelling across your
 // desktop; an iframe in a grid can't show that honestly, so they're labelled
 // instead of faked.
-const WINDOW_MOTION = new Set(['dock', 'walk-to-prompt']);
+const WINDOW_MOTION = new Set(['dock', 'walk-to-prompt', 'roam']);
 
 const gallery = document.getElementById('gallery');
 const frames = new Map(); // contentWindow -> entry, for routing replies
