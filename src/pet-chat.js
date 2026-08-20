@@ -26,6 +26,8 @@
 // thread, and the prompt stays small enough to stay quick.
 const HISTORY_TURNS = 8;
 
+const { cliRunQuery } = require('./pet-cli');
+
 // Small and fast on purpose. This is a one-line aside, and it is spending the
 // same allowance the user's real session needs.
 const PET_MODEL = 'claude-haiku-4-5-20251001';
@@ -145,8 +147,10 @@ class PetChat {
 
   async _loadRunQuery() {
     if (this._runQuery) return this._runQuery;
-    const mod = await import('@anthropic-ai/claude-agent-sdk');
-    return (opts) => mod.query(opts);
+    // Through the `claude` the user already has, on the login they already
+    // use, spending the allowance they already understand — see pet-cli.js for
+    // why this is not the Agent SDK.
+    return cliRunQuery;
   }
 
   /**
@@ -252,7 +256,7 @@ class PetChat {
     const message = String((thrown && thrown.message) || thrown);
     // The one failure worth explaining, because it has a fix.
     if (/Cannot find module|ERR_MODULE_NOT_FOUND/.test(message)) {
-      return { error: 'Pet chat needs the Agent SDK: npm install @anthropic-ai/claude-agent-sdk' };
+      return { error: 'Pet chat needs the `claude` command — install Claude Code and log in.' };
     }
     return { error: message.slice(0, 200) };
   }

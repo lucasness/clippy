@@ -184,15 +184,15 @@ test('thinking out loud is not what the pet says', async () => {
   assert.deepEqual(await chat.say('busy?'), { text: 'Napping.' });
 });
 
-test('a missing Agent SDK is an instruction, not a stack trace', async () => {
+test('a machine with no claude on it is an instruction, not a stack trace', async () => {
   const chat = new PetChat({
     context: () => CTX,
     runQuery: () => {
-      throw new Error("Cannot find module '@anthropic-ai/claude-agent-sdk'");
+      throw new Error("Cannot find module './pet-cli'");
     },
   });
   const { error } = await chat.say('hello?');
-  assert.match(error, /npm install @anthropic-ai\/claude-agent-sdk/);
+  assert.match(error, /needs the `claude` command/);
 });
 
 test('a model that says nothing at all does not become an empty bubble', async () => {
