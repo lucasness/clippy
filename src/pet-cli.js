@@ -106,7 +106,23 @@ function askArgs({ prompt, system = '', model = '' }) {
   if (system) args.push('--system-prompt', String(system));
   // No tools: this is a sentence, not a session. The pet has never had them.
   args.push('--allowed-tools', '');
-  args.push('--strict-mcp-config');
+  // Nothing of the user's setup comes with it — no CLAUDE.md, no skills, no
+  // MCP servers, and above all no hooks. Two reasons, and the second is the
+  // load-bearing one:
+  //
+  // A pet carrying a repository's coding instructions is a pet paying for them
+  // on every "hello", and answering as if it had been asked about the code.
+  //
+  // And Clippy's own hooks live in the settings this would otherwise read, so
+  // asking the pet a question would fire UserPromptSubmit at Clippy, which
+  // would take it for a real session starting: a phantom buddy for a
+  // conversation the user had with an existing one. The pet must not be able
+  // to summon itself.
+  //
+  // Unlike --bare, auth is untouched, which is the whole point — the login the
+  // user already has is what pays for this.
+  args.push('--safe-mode');
+  args.push('--strict-mcp-config'); // belt and braces; --safe-mode covers it
   return args;
 }
 

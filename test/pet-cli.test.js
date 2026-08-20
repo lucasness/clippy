@@ -15,6 +15,11 @@ test('the pet is asked without tools, and without a coding preamble', () => {
   assert.ok(!args.includes('--append-system-prompt'), args.join(' '));
   // A sentence, not a session.
   assert.ok(args.includes('--allowed-tools'), args.join(' '));
+  // Nothing of the user's setup comes with it. The hooks are the load-bearing
+  // one: Clippy's own live in those settings, so without this, asking the pet
+  // a question fires UserPromptSubmit at Clippy and it grows a phantom buddy
+  // for a conversation the user had with an existing one.
+  assert.ok(args.includes('--safe-mode'), args.join(' '));
   // --bare reads auth strictly from an API key and never touches the login the
   // user already has, which is the one thing this must never do.
   assert.ok(!args.includes('--bare'), args.join(' '));
