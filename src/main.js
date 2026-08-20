@@ -77,6 +77,7 @@ const { createOutbox } = require('./outbox');
 const { createFocusProbe, looksFocused } = require('./frontmost');
 const { describeSource } = require('./source-app');
 const { routingPrompt, parseChoice, routable } = require('./delegate');
+const { looksLikeAnErrand, errandPrompt, parseErrand, onMyWay } = require('./errand');
 const { habitatFrom, describePlace, destinations, spotFor } = require('./habitat');
 const {
   routeBetween,
@@ -1996,6 +1997,41 @@ function travelTo(buddy, to, done) {
     if (done) done();
   });
   return true;
+}
+
+/**
+ * Was that an errand, and if so, run it.
+ *
+ * Sits in front of the chat rather than beside it: a message that turns out to
+ * be "go to the top right" is answered by going, and never also answered in
+ * words by the persona, which would have the pet agreeing to walk somewhere in
+ * one breath and chatting about something else in the next.
+ *
+ * Cheap-guards first — most messages are conversation, and a round trip per
+ * chat message would spend the user's allowance on nothing. Then the same
+ * numbered question delegate.js asks, read as strictly.
+ *
+ * @returns {Promise<{text: string}|null>} what the pet says, or null to let the
+ *   ordinary chat have the message
+ */
+async function runErrand(buddy, text) {
+  if (!looksLikeAnErrand(text)) return null;
+  if (!buddy.win.isVisible()) return null; // nowhere to walk from
+
+  const bounds = buddy.win.getBounds();
+  const world = habitatFrom(screen.getAllDisplays(), bounds, buddy.dock?.bounds);
+  const places = destinations(world);
+  if (!places.length) return null;
+
+  const asked = await chatFor(buddy).ask(errandPrompt(places, text));
+  if (asked.error) return null; // no answer is not a refusal — let it chat
+  const { place } = parseErrand(asked.text, places);
+  if (!place) return null;
+
+  const display = world.displays.find((d) => d.id === place.displayId);
+  if (!display) return null;
+  const walked = travelTo(buddy, spotFor(display, place.region, bounds, WIN_GAP));
+  return walked ? { text: onMyWay(place) } : null;
 }
 
 /**
@@ -4828,7 +4864,11 @@ app.whenReady().then(async () => {
     // touches the watched session — see src/pet-chat.js for why it can't.
     const buddy = buddyForSender(e.sender);
     if (!buddy) return { error: 'no session for this window' };
-    return chatFor(buddy).say(typeof text === 'string' ? text : '');
+    const said = typeof text === 'string' ? text : '';
+    // "Go over to the MacBook screen" is a thing to do, not a thing to answer.
+    const errand = await runErrand(buddy, said);
+    if (errand) return errand;
+    return chatFor(buddy).say(said);
   });
   ipcMain.on('clippy-sandbox-fire', (_e, id) => {
     if (!SANDBOX) return;
