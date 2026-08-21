@@ -1346,72 +1346,86 @@ function drawCow({
   // Two thick legs, alternating a pixel of lift mid-stride.
   [11, 17].forEach((x, i) => {
     const raised = step >= 0 && i % 2 === step % 2;
-    rect(g, x, 26 + dy, x + 3, 31 + dy - (raised ? 1 : 0), HIDE);
-    put(g, x + 3, 30 + dy - (raised ? 1 : 0), HIDE_DARK);
+    rect(g, x, 25 + dy, x + 4, 31 + dy - (raised ? 1 : 0), HIDE);
+    put(g, x + 4, 30 + dy - (raised ? 1 : 0), HIDE_DARK);
   });
 
-  // Body: a barrel, shaded down its right, with a paler belly.
-  blob(g, 8, 18 + dy, 23, 27 + dy, HIDE, 3);
-  rect(g, 22, 19 + dy, 23, 26 + dy, HIDE_DARK);
+  // Body: a barrel, shaded down its right.
+  blob(g, 8, 16 + dy, 23, 26 + dy, HIDE, 3);
+  rect(g, 22, 17 + dy, 23, 25 + dy, HIDE_DARK);
 
   // Arms, in Clod's three positions, each ending in a pale grey hand.
   const arm = (side, mode) => {
     const x0 = side < 0 ? 4 : 24;
-    const [y0, y1] = mode === 0 ? [19, 25] : mode === 1 ? [14, 20] : [9, 16];
+    const [y0, y1] = mode === 0 ? [17, 22] : mode === 1 ? [12, 18] : [7, 14];
     rect(g, x0, y0 + dy, x0 + 3, y1 + dy, HIDE);
     rect(g, x0, y1 + dy, x0 + 3, y1 + 1 + dy, SNOUT); // the hand
   };
   arm(-1, armL);
   if (pointDown) {
-    rect(g, 24, 21 + dy, 27, 26 + dy, HIDE);
-    rect(g, 25, 26 + dy, 28, 27 + dy, SNOUT); // pointing at the line
+    rect(g, 24, 19 + dy, 27, 24 + dy, HIDE);
+    rect(g, 25, 24 + dy, 28, 25 + dy, SNOUT); // pointing at the line
   } else arm(1, armR);
 
-  // Horns first, so the head is drawn over their roots: up out of the crown
-  // and tapering outward, rather than standing off the sides like antennae.
-  rect(g, 10, 2 + dy, 11, 4 + dy, HORN);
-  rect(g, 8, 0 + dy, 10, 2 + dy, HORN);
-  rect(g, 20, 2 + dy, 21, 4 + dy, HORN);
-  rect(g, 21, 0 + dy, 23, 2 + dy, HORN);
+  // Horns. Stone-grey, thick at the root and tapering, angled out and then
+  // up — they carry the silhouette, and drawing them as nubs was what made
+  // the first attempt read as a bear rather than a bull.
+  rect(g, 8, 3 + dy, 9, 6 + dy, HORN);
+  rect(g, 6, 1 + dy, 8, 4 + dy, HORN);
+  rect(g, 5, 0 + dy, 6, 2 + dy, HORN);
+  rect(g, 22, 3 + dy, 23, 6 + dy, HORN);
+  rect(g, 23, 1 + dy, 25, 4 + dy, HORN);
+  rect(g, 25, 0 + dy, 26, 2 + dy, HORN);
 
-  // The head, and then the snout that is most of it.
-  blob(g, 6, 3 + dy, 25, 19 + dy, HIDE, 4);
-  // Ears after the head, or the head paints over them: out at the cheekbone,
-  // well clear of the horns.
-  ear(g, 4, 10 + dy, 4, 4, HIDE);
-  ear(g, 24, 10 + dy, 4, 4, HIDE);
-  blob(g, 8, 12 + dy, 23, 20 + dy, SNOUT, 3);
-  rect(g, 11, 18 + dy, 20, 18 + dy, HIDE_DARK); // the mouth, one flat line
-  put(g, 13, 15 + dy, OEYE); // nostrils
-  put(g, 18, 15 + dy, OEYE);
+  // Ears: wedges pointing outward, high on the head just under the horns —
+  // sideways, not the upright triangles a cat gets, and pale inside.
+  blob(g, 2, 8 + dy, 7, 11 + dy, HIDE, 2);
+  blob(g, 3, 9 + dy, 6, 10 + dy, SNOUT, 1);
+  blob(g, 24, 8 + dy, 29, 11 + dy, HIDE, 2);
+  blob(g, 25, 9 + dy, 28, 10 + dy, SNOUT, 1);
 
-  // Two small eyes, set much too close together under heavy brows. This is
-  // the whole face: the brows do the acting and the eyes barely move.
-  const ey = 10 + dy + (pointDown ? 1 : 0);
-  for (const ex of [12 + look, 18 + look]) {
+  // The head, domed on top, with the jaw a shade darker the way the film
+  // shades his cheeks.
+  blob(g, 6, 4 + dy, 25, 17 + dy, HIDE, 4);
+  rect(g, 9, 13 + dy, 22, 16 + dy, HIDE_DARK);
+
+  // The snout: pale, bulbous, hanging below the jaw. The feature everybody
+  // remembers, so it is drawn big enough to be most of the face.
+  blob(g, 9, 12 + dy, 22, 19 + dy, SNOUT, 3);
+  rect(g, 12, 17 + dy, 19, 17 + dy, HIDE_DARK); // the mouth, one flat line
+  put(g, 12, 15 + dy, HIDE_DARK); // nostrils, barely there
+  put(g, 19, 15 + dy, HIDE_DARK);
+
+  // Two narrow, heavy-lidded eyes, set wide. Half-shut is his whole
+  // expression: the lid does the work and the eye underneath barely shows.
+  const ey = 9 + dy + (pointDown ? 1 : 0);
+  for (const ex of [10 + look, 18 + look]) {
     if (happy) {
-      put(g, ex - 1, ey + 1, OEYE);
-      put(g, ex, ey, OEYE);
-      put(g, ex + 1, ey + 1, OEYE);
+      put(g, ex, ey + 1, OEYE);
+      rect(g, ex + 1, ey, ex + 2, ey, OEYE);
+      put(g, ex + 3, ey + 1, OEYE);
     } else if (blink || sleeping) {
-      rect(g, ex - 1, ey + 1, ex + 1, ey + 1, OEYE);
+      rect(g, ex, ey + 1, ex + 3, ey + 1, OEYE);
     } else {
-      rect(g, ex, ey, ex + 1, ey + 1, OEYE);
+      rect(g, ex, ey, ex + 3, ey, OEYE); // the lid, heavy across the top
+      rect(g, ex + 1, ey + 1, ex + 2, ey + 1, OEYE); // what is left of the eye
     }
   }
-  // The brows: thick, black, and never subtle.
-  const brow = 8 + dy + (pointDown ? 1 : 0);
+
+  // Brows: thin strokes, high above the eye with clear yellow between. The
+  // film's are delicate, which is exactly why he reads as unimpressed rather
+  // than angry — heavy bars made him look furious in the first pass.
+  const brow = 6 + dy + (pointDown ? 1 : 0);
   if (worried) {
-    // Both inner ends dropped toward the nose, with the gap between them
-    // filled in: a furrow reads as distress, where one brow up and one down
-    // would only make him look sceptical — which is his resting face anyway.
-    rect(g, 10, brow, 12, brow + 1, OEYE);
-    rect(g, 13, brow + 1, 14, brow + 2, OEYE);
-    rect(g, 16, brow + 1, 17, brow + 2, OEYE);
-    rect(g, 18, brow, 20, brow + 1, OEYE);
+    rect(g, 9, brow, 11, brow, OEYE);
+    rect(g, 12, brow + 1, 13, brow + 1, OEYE);
+    rect(g, 18, brow + 1, 19, brow + 1, OEYE);
+    rect(g, 20, brow, 22, brow, OEYE);
   } else {
-    rect(g, 10, brow, 14, brow + 1, OEYE);
-    rect(g, 16, brow, 20, brow + 1, OEYE);
+    put(g, 9, brow + 1, OEYE);
+    rect(g, 10, brow, 13, brow, OEYE);
+    rect(g, 18, brow, 21, brow, OEYE);
+    put(g, 22, brow + 1, OEYE);
   }
 
   g = lean(g, tilt);
