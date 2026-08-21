@@ -1271,6 +1271,165 @@ function drawClod({
   return g;
 }
 
+/* ---------------- The cow, in pixels ---------------- */
+
+const COW_PALETTE = [
+  [0, 0, 0], // 0 transparent
+  [42, 37, 50], // 1 outline
+  [230, 179, 58], // 2 hide — the mustard yellow he is known for
+  [196, 143, 36], // 3 hide, shaded
+  [214, 201, 214], // 4 muzzle and hands, a pale grey-lilac
+  [116, 112, 122], // 5 horns
+  [24, 18, 16], // 6 eyes, brows, nostrils
+  [253, 246, 234], // 7 sweat, zzz, thought dots
+];
+const [OWT, OWINK, HIDE, HIDE_DARK, SNOUT, HORN, OEYE, OW_CREAM] = [0, 1, 2, 3, 4, 5, 6, 7];
+
+// He is tall and stands upright, so his marks go up and out to the right
+// without having to clear a wide body the way Clod's do.
+const COW_ZZZ = [
+  [24, 8, 3],
+  [27, 3, 3],
+  [23, 0, 2],
+];
+const COW_DOTS = [
+  [26, 10, 1],
+  [28, 6, 1],
+  [26, 1, 2],
+];
+
+/**
+ * The cow: a stocky yellow biped with a muzzle that arrived before he did.
+ *
+ * Drawn after the bull from a film whose animation was widely called a
+ * disaster, which makes him the easiest character here to be faithful to —
+ * the joke is the flatness, so the proportions are the likeness. Three things
+ * carry it and everything else is filler: an enormous pale snout across the
+ * bottom of the face, heavy black brows, and two small eyes sitting much too
+ * close underneath them. Grey horns, and hands the same pale grey as the nose.
+ *
+ * @param {object} opts
+ * @param {number} opts.lift     pixels to hop up by
+ * @param {number} opts.settle   1 = the body settles a pixel (breathing)
+ * @param {boolean} opts.blink   eyes shut for a frame
+ * @param {boolean} opts.happy   eyes curved shut — delighted
+ * @param {boolean} opts.worried brows pinched in over the eyes
+ * @param {number} opts.look     -1/0/1: slide the eyes sideways
+ * @param {number} opts.armL     0 rest, 1 raised, 2 high overhead
+ * @param {number} opts.armR     same, right side
+ * @param {number} opts.step     0-3 walk frame: legs alternate
+ * @param {boolean} opts.pointDown right arm angled at the ground (the prompt)
+ * @param {number} opts.sweat    a bead beside him, lower each step
+ * @param {number} opts.sleeping how many sleep marks are floating
+ * @param {number} opts.thinking how many thought dots are rising
+ * @param {number} opts.tilt     lean the whole body sideways
+ */
+function drawCow({
+  lift = 0,
+  settle = 0,
+  blink = false,
+  happy = false,
+  worried = false,
+  look = 0,
+  armL = 0,
+  armR = 0,
+  step = -1,
+  pointDown = false,
+  sweat = 0,
+  sleeping = 0,
+  thinking = 0,
+  tilt = 0,
+} = {}) {
+  let g = grid();
+  const dy = BASE_Y - lift + settle;
+
+  // Two thick legs, alternating a pixel of lift mid-stride.
+  [11, 17].forEach((x, i) => {
+    const raised = step >= 0 && i % 2 === step % 2;
+    rect(g, x, 26 + dy, x + 3, 31 + dy - (raised ? 1 : 0), HIDE);
+    put(g, x + 3, 30 + dy - (raised ? 1 : 0), HIDE_DARK);
+  });
+
+  // Body: a barrel, shaded down its right, with a paler belly.
+  blob(g, 8, 18 + dy, 23, 27 + dy, HIDE, 3);
+  rect(g, 22, 19 + dy, 23, 26 + dy, HIDE_DARK);
+
+  // Arms, in Clod's three positions, each ending in a pale grey hand.
+  const arm = (side, mode) => {
+    const x0 = side < 0 ? 4 : 24;
+    const [y0, y1] = mode === 0 ? [19, 25] : mode === 1 ? [14, 20] : [9, 16];
+    rect(g, x0, y0 + dy, x0 + 3, y1 + dy, HIDE);
+    rect(g, x0, y1 + dy, x0 + 3, y1 + 1 + dy, SNOUT); // the hand
+  };
+  arm(-1, armL);
+  if (pointDown) {
+    rect(g, 24, 21 + dy, 27, 26 + dy, HIDE);
+    rect(g, 25, 26 + dy, 28, 27 + dy, SNOUT); // pointing at the line
+  } else arm(1, armR);
+
+  // Horns first, so the head is drawn over their roots: up out of the crown
+  // and tapering outward, rather than standing off the sides like antennae.
+  rect(g, 10, 2 + dy, 11, 4 + dy, HORN);
+  rect(g, 8, 0 + dy, 10, 2 + dy, HORN);
+  rect(g, 20, 2 + dy, 21, 4 + dy, HORN);
+  rect(g, 21, 0 + dy, 23, 2 + dy, HORN);
+
+  // The head, and then the snout that is most of it.
+  blob(g, 6, 3 + dy, 25, 19 + dy, HIDE, 4);
+  // Ears after the head, or the head paints over them: out at the cheekbone,
+  // well clear of the horns.
+  ear(g, 4, 10 + dy, 4, 4, HIDE);
+  ear(g, 24, 10 + dy, 4, 4, HIDE);
+  blob(g, 8, 12 + dy, 23, 20 + dy, SNOUT, 3);
+  rect(g, 11, 18 + dy, 20, 18 + dy, HIDE_DARK); // the mouth, one flat line
+  put(g, 13, 15 + dy, OEYE); // nostrils
+  put(g, 18, 15 + dy, OEYE);
+
+  // Two small eyes, set much too close together under heavy brows. This is
+  // the whole face: the brows do the acting and the eyes barely move.
+  const ey = 10 + dy + (pointDown ? 1 : 0);
+  for (const ex of [12 + look, 18 + look]) {
+    if (happy) {
+      put(g, ex - 1, ey + 1, OEYE);
+      put(g, ex, ey, OEYE);
+      put(g, ex + 1, ey + 1, OEYE);
+    } else if (blink || sleeping) {
+      rect(g, ex - 1, ey + 1, ex + 1, ey + 1, OEYE);
+    } else {
+      rect(g, ex, ey, ex + 1, ey + 1, OEYE);
+    }
+  }
+  // The brows: thick, black, and never subtle.
+  const brow = 8 + dy + (pointDown ? 1 : 0);
+  if (worried) {
+    // Both inner ends dropped toward the nose, with the gap between them
+    // filled in: a furrow reads as distress, where one brow up and one down
+    // would only make him look sceptical — which is his resting face anyway.
+    rect(g, 10, brow, 12, brow + 1, OEYE);
+    rect(g, 13, brow + 1, 14, brow + 2, OEYE);
+    rect(g, 16, brow + 1, 17, brow + 2, OEYE);
+    rect(g, 18, brow, 20, brow + 1, OEYE);
+  } else {
+    rect(g, 10, brow, 14, brow + 1, OEYE);
+    rect(g, 16, brow, 20, brow + 1, OEYE);
+  }
+
+  g = lean(g, tilt);
+  outline(g);
+
+  if (sweat) drop(g, 26, 6 + dy + sweat, OW_CREAM, OWINK);
+  if (sleeping) floating(g, (layer) => zzz(layer, sleeping, OW_CREAM, COW_ZZZ));
+  if (thinking) {
+    floating(g, (layer) => {
+      for (let i = 0; i < Math.min(thinking, COW_DOTS.length); i++) {
+        const [x, y, size] = COW_DOTS[i];
+        rect(layer, x, y, x + size - 1, y + size - 1, OW_CREAM);
+      }
+    });
+  }
+  return g;
+}
+
 const CLOD_POSES = {
   idle: [
     { indices: drawClod({ settle: 0 }), delayMs: 520 },
@@ -1328,6 +1487,62 @@ const CLOD_POSES = {
   ],
 };
 
+const COW_POSES = {
+  idle: [
+    { indices: drawCow({ settle: 0 }), delayMs: 560 },
+    { indices: drawCow({ settle: 1 }), delayMs: 560 },
+    { indices: drawCow({ settle: 1, blink: true }), delayMs: 140 },
+    { indices: drawCow({ settle: 0, look: 1 }), delayMs: 460 },
+    { indices: drawCow({ settle: 1, look: 1 }), delayMs: 320 },
+  ],
+  think: [
+    { indices: drawCow({ settle: 0, look: -1, thinking: 1 }), delayMs: 420 },
+    { indices: drawCow({ settle: 1, look: -1, thinking: 2 }), delayMs: 420 },
+    { indices: drawCow({ settle: 1, look: 1, thinking: 3 }), delayMs: 420 },
+    { indices: drawCow({ settle: 0, look: 1, thinking: 3, blink: true }), delayMs: 140 },
+  ],
+  excited: [
+    { indices: drawCow({ lift: 0, armL: 1, armR: 1 }), delayMs: 110 },
+    { indices: drawCow({ lift: 3, armL: 2, armR: 2 }), delayMs: 110 },
+    { indices: drawCow({ lift: 5, armL: 2, armR: 2 }), delayMs: 140 },
+    { indices: drawCow({ lift: 2, armL: 1, armR: 1 }), delayMs: 110 },
+  ],
+  stress: [
+    { indices: drawCow({ worried: true, tilt: -1, sweat: 1 }), delayMs: 90 },
+    { indices: drawCow({ worried: true, tilt: 1, sweat: 1 }), delayMs: 90 },
+    { indices: drawCow({ worried: true, tilt: -1, sweat: 2 }), delayMs: 90 },
+    { indices: drawCow({ worried: true, tilt: 1, sweat: 2 }), delayMs: 90 },
+    { indices: drawCow({ worried: true, tilt: 0, sweat: 3 }), delayMs: 120 },
+  ],
+  walk: [
+    { indices: drawCow({ step: 0, settle: 0, tilt: -1 }), delayMs: 160 },
+    { indices: drawCow({ step: 1, settle: 1, tilt: 0 }), delayMs: 160 },
+    { indices: drawCow({ step: 0, settle: 0, tilt: 1 }), delayMs: 160 },
+    { indices: drawCow({ step: 1, settle: 1, tilt: 0, blink: true }), delayMs: 160 },
+  ],
+  point: [
+    { indices: drawCow({ pointDown: true, settle: 0 }), delayMs: 420 },
+    { indices: drawCow({ pointDown: true, settle: 1 }), delayMs: 420 },
+  ],
+  sleep: [
+    { indices: drawCow({ settle: 1, sleeping: 1 }), delayMs: 640 },
+    { indices: drawCow({ settle: 1, sleeping: 2 }), delayMs: 640 },
+    { indices: drawCow({ settle: 0, sleeping: 3 }), delayMs: 640 },
+    { indices: drawCow({ settle: 1, sleeping: 3 }), delayMs: 640 },
+  ],
+  cheer: [
+    { indices: drawCow({ lift: 0, armL: 2, armR: 2, happy: true }), delayMs: 130 },
+    { indices: drawCow({ lift: 4, armL: 2, armR: 2, happy: true, tilt: -1 }), delayMs: 130 },
+    { indices: drawCow({ lift: 3, armL: 2, armR: 2, happy: true, tilt: 1 }), delayMs: 130 },
+  ],
+  wave: [
+    { indices: drawCow({ armR: 1, happy: true, tilt: -1 }), delayMs: 200 },
+    { indices: drawCow({ armR: 2, happy: true, tilt: 0 }), delayMs: 200 },
+    { indices: drawCow({ armR: 1, happy: true, tilt: 1 }), delayMs: 200 },
+    { indices: drawCow({ armR: 2, happy: true, tilt: 0 }), delayMs: 200 },
+  ],
+};
+
 function toAscii(g) {
   const rows = [];
   for (let y = 0; y < H; y++) {
@@ -1347,6 +1562,7 @@ const THEMES = [
   { id: 'cat', palette: PALETTE, poses: CAT_POSES },
   { id: 'clip', poses: CLIP_POSES, perColour: true },
   { id: 'clod', palette: CLOD_PALETTE, poses: CLOD_POSES },
+  { id: 'cow', palette: COW_PALETTE, poses: COW_POSES },
 ];
 
 // `clip` used to be a blocky two-loop paperclip with `classic` beside it doing
