@@ -1501,6 +1501,80 @@ const CLOD_POSES = {
   ],
 };
 
+/**
+ * The cow on all fours, from the side, mid-stride.
+ *
+ * He stands up like a person for most of what he does, but a bull crossing
+ * ground drops onto four legs — so this is what plays when he walks left or
+ * right, and the upright walk is kept for going up and down an edge, where
+ * standing is the only thing that makes sense.
+ *
+ * Same gait as the cat's: two pairs out of phase, front legs leading. The
+ * head hangs low and forward with the snout at the end of it, which is the
+ * pose the film puts him in whenever he is actually going somewhere.
+ *
+ * @param {number} opts.step  0-3 through the walk cycle
+ * @param {number} opts.bob   1 = the body rises on the passing stride
+ * @param {boolean} opts.blink
+ */
+function drawCowWalk({ step = 0, bob = 0, blink = false } = {}) {
+  const g = grid();
+  const dy = -bob; // the body rises; the hooves do not
+
+  // Legs first, so the barrel covers their tops.
+  const reach = [
+    [-2, 2],
+    [0, 0],
+    [2, -2],
+    [0, 0],
+  ][step % 4];
+  const LEGS = [
+    [12, 0],
+    [16, 1],
+    [21, 1],
+    [25, 0],
+  ];
+  for (const [x, phase] of LEGS) {
+    const swing = reach[phase];
+    rect(g, x, 25 + dy, x + 1, 30, HIDE); // thigh, hanging from the barrel
+    rect(g, x + swing, 30, x + 1 + swing, 33, HIDE); // shin, swinging
+    rect(g, x + swing - 1, 33, x + 2 + swing, 34, SNOUT); // a pale hoof
+  }
+
+  // The barrel, with a shoulder hump at the front the way a bull carries one.
+  blob(g, 11, 14 + dy, 29, 26 + dy, HIDE, 4);
+  rect(g, 12, 25 + dy, 28, 26 + dy, HIDE_DARK); // shaded underside
+
+  // Tail: down off the back, with a dark tuft.
+  rect(g, 28, 17 + dy, 29, 22 + dy, HIDE);
+  rect(g, 28, 22 + dy, 29, 24 + dy, HIDE_DARK);
+
+  // The head, hung low and forward of the shoulder — clear of the barrel, or
+  // the two read as one shapeless mass with a nose on the end.
+  blob(g, 4, 17 + dy, 15, 28 + dy, HIDE, 3);
+  blob(g, 2, 21 + dy, 10, 28 + dy, SNOUT, 2);
+  rect(g, 3, 26 + dy, 8, 26 + dy, HIDE_DARK); // the mouth
+  put(g, 4, 24 + dy, HIDE_DARK); // one nostril, in profile
+
+  // One horn and one ear show from the side; the horn grows out of the head
+  // rather than floating above it.
+  rect(g, 8, 14 + dy, 9, 18 + dy, HORN);
+  rect(g, 7, 11 + dy, 8, 15 + dy, HORN);
+  rect(g, 6, 9 + dy, 7, 12 + dy, HORN);
+  ear(g, 11, 15 + dy, 4, 3, HIDE);
+
+  // The eye and the brow above it, doing what they always do.
+  if (blink) rect(g, 6, 21 + dy, 9, 21 + dy, OEYE);
+  else {
+    rect(g, 6, 20 + dy, 9, 20 + dy, OEYE);
+    rect(g, 7, 21 + dy, 8, 21 + dy, OEYE);
+  }
+  rect(g, 6, 18 + dy, 9, 18 + dy, OEYE);
+
+  outline(g);
+  return g;
+}
+
 const COW_POSES = {
   idle: [
     { indices: drawCow({ settle: 0 }), delayMs: 560 },
@@ -1528,7 +1602,16 @@ const COW_POSES = {
     { indices: drawCow({ worried: true, tilt: 1, sweat: 2 }), delayMs: 90 },
     { indices: drawCow({ worried: true, tilt: 0, sweat: 3 }), delayMs: 120 },
   ],
+  // Going somewhere across the ground: down onto four legs.
   walk: [
+    { indices: drawCowWalk({ step: 0, bob: 0 }), delayMs: 150 },
+    { indices: drawCowWalk({ step: 1, bob: 1 }), delayMs: 150 },
+    { indices: drawCowWalk({ step: 2, bob: 0 }), delayMs: 150 },
+    { indices: drawCowWalk({ step: 3, bob: 1, blink: true }), delayMs: 150 },
+  ],
+  // Up or down an edge, where dropping onto all fours would mean walking
+  // into the wall: he stands, and goes up it on two legs.
+  climb: [
     { indices: drawCow({ step: 0, settle: 0, tilt: -1 }), delayMs: 160 },
     { indices: drawCow({ step: 1, settle: 1, tilt: 0 }), delayMs: 160 },
     { indices: drawCow({ step: 0, settle: 0, tilt: 1 }), delayMs: 160 },

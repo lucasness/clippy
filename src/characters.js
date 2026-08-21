@@ -48,7 +48,7 @@ const CHARACTERS = [
   // The bull from a film whose animation was widely called a disaster. The
   // flatness is the joke, which makes him the one character here where being
   // faithful and being easy are the same thing.
-  { id: 'cow', label: 'Cow', poses: POSES },
+  { id: 'cow', label: 'Cow', poses: [...POSES, CLIMB] },
   { id: 'orbit', label: 'Orbit', poses: POSES, vector: 'orbit', usesColour: true },
   // The paperclip again, but drawn as live SVG: the same wire, smooth at any
   // size, recoloured per session by CSS-free markup instead of baked GIFs.
