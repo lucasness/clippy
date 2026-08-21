@@ -67,6 +67,25 @@ function blob(g, x0, y0, x1, y1, c, r = 1) {
  * Lean a drawing over: rows near the top slide sideways, the base stays put.
  * Cheaper than redrawing a whole pose, and it's what sells a walk cycle.
  */
+/**
+ * Flip a drawing left-to-right.
+ *
+ * Every character here is drawn facing right, because that is what the
+ * renderer assumes when it decides whether turning around needs a mirror (see
+ * drawnFacing in clippy.js). A profile is easier to author nose-first at the
+ * left, so the ones that are get flipped here rather than having every
+ * coordinate written backwards.
+ */
+function mirror(g) {
+  const out = grid();
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      if (g[y * W + x]) put(out, W - 1 - x, y, g[y * W + x]);
+    }
+  }
+  return out;
+}
+
 function lean(g, px) {
   if (!px) return g;
   const out = grid();
@@ -1572,7 +1591,11 @@ function drawCowWalk({ step = 0, bob = 0, blink = false } = {}) {
   rect(g, 6, 18 + dy, 9, 18 + dy, OEYE);
 
   outline(g);
-  return g;
+  // Authored nose-first at the left because a profile is easier to draw that
+  // way; flipped so it faces right like every other pose, which is what the
+  // renderer's mirror assumes. Without this he crossed the screen rightwards
+  // while facing the way he had come.
+  return mirror(g);
 }
 
 const COW_POSES = {
